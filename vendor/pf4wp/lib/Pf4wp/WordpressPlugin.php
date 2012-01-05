@@ -32,7 +32,7 @@ use Pf4wp\Template\TwigEngine;
  * WordPress: 3.1.0
  *
  * @author Mike Green <myatus@gmail.com>
- * @version 0.9.5
+ * @version 0.9.6
  * @package Pf4wp
  */
 class WordpressPlugin
@@ -178,7 +178,7 @@ class WordpressPlugin
      * ));
      * $_pf4wp_ucl->register();
      * 
-     * My\Plugin::register(__FILE__); // <-- Register plugin with WordPress here
+     * call_user_func('My\\Plugin::register', __FILE__); // <-- Register plugin with WordPress here
      * </code>
      *
      * @param string $plugin_file The filename of the plugin's main file
