@@ -2,34 +2,30 @@
 Contributors: Myatu
 Tags: background, theme, photo, image, rotate, slideshow, random, flickr
 Requires at least: 3.2.1
-Tested up to: 3.3
-Stable tag: 0.9
+Tested up to: 3.3.1
+Stable tag: 0.9.3
 
 Display a random image as the website background at each visit or as a timed slideshow, without the need to edit the theme.
 
 == Description ==
 
-Background Manager is a powerful replacement for the default WordPress background manager. It allows you to 
-create multiple image sets, from which a random image is selected and displayed as the website background. 
-The images can be uploaded from your local computer, select images in your Media Library, or import them from
-other plugins and third-party sources.
+_Background Manager_ is a powerful replacement for the default WordPress background manager. 
 
-With an easy to use menu, you can also define how the background image is displayed, such as full-screen (with 
-ratio correction), tiled, fixed or scrolling, and define where the image is positioned. 
+It allows you to create multiple image sets, from which a random image is selected and displayed as the website background. The images can be uploaded from your local computer, selected from images available in your Media Library, or import them from other plugins and third-party sources.
 
-You also have the ability to add an overlay to the background images, with a choice of various patterns. Of 
-course it is also possible to add a color to the background instead (or in addition to) showing background
-image.
+With an easy to use menu, you can also define how the background image is displayed, such as full-screen (with ratio correction), tiled, fixed or scrolling, and define where the image is positioned. 
 
-Where supported, in full-screen mode the the background image is "eased in" when it is ready to be displayed. No
-longer will visitors with slower Internet connections have to endure watching a background image load from top 
-down.
+You also have the ability to add an overlay to the background images with a choice of pre-defined patterns. And of course it is also possible to add a background color.
 
-You can limit the background images to certain parts of WordPress, for example only on the front page or a
-full-page post. Individual pages and posts can also override the image set used as the background, which allows
-you to have pages or posts with a different background theme.
+Where supported, in full-screen mode the the background image is "eased in" when it is ready to be displayed. No longer will visitors with slower Internet connections have to endure watching a background image load from top down.
+
+You can also limit the background images to certain parts of WordPress, for example only on the front page or a full-page post. And for each individual page or post, you can also override the images and overlay used as the background, which allows you to have pages or posts with a different background theme.
 
 All this is done without the need to edit the theme or any other files!
+
+= Demo =
+
+The home page for [Background Manager](http://j.mp/bgmwp) is also a live demonstration of the plugin.
 
 = Features =
 
@@ -37,17 +33,18 @@ All this is done without the need to edit the theme or any other files!
 * Full-screen background images
 * Full control over position for images in normal display mode (tiling, positioning, scrolling and stretching)
 * "Ease in" of a full-screen background image
-* Fade effect between different background images displayed
-* Multiple _Image Sets_
-* User definable image rotation, of 10 seconds upwards.
-* Override images displayed in the background per post or page
-* Background overlays
-* Enable or disable the background on the front page, error pages, etc.
+* Multiple _Image Sets_ to select a random image from
+* Override the _Image Set_ for each Post, Page or Custom post type
+* User defined display interval between the background images (timed slideshow)
+* Fade-in/fade-out effect between the different background images displayed
+* Pre-defined background overlays
+* Enable or disable the background images on the Front page, Error pages, Custom post types, etc.
 * Optional thumbnail/information tab for the visitor to learn more about the background
 * Import from various sources, such as:
-   * Flickr
+   * Flickr (including license and ownership)
    * NextGEN Gallery Plugin
    * WP Flickr Background Plugin
+* Define the background opacity (available in Full Screen only)
 
 = License =
 
@@ -61,7 +58,7 @@ This product uses the Flickr API but is not endorsed or certified by Flickr.
 1. Activate the plugin through the __Plugins__ menu in WordPress
 1. Access the plugin via __Appearance__ -> __Background__ menu
 
-Additional help is provided via the Help tabs within the plugin
+Additional help is provided via the _Help_ tabs within the plugin
 
 = Requirements =
 
@@ -73,11 +70,33 @@ with PHP versions older than 5.3.
 
 == Screenshots ==
 
-1. A full-screen background behind the TwentyEleven theme, with the a thumbnail preview in the lower-right corner
+1. A full-screen background behind the TwentyEleven theme, with the a thumbnail preview in the lower-left corner
 2. Editing an Image Set within Background Manager
 
 == Changelog ==
 
-= 0.9 =
+= 0.9.3 (January 14, 2012) =
+* Fixed: Background overrides for individual pages and posts were not honored when 'Select a random image' was set to 'At each browser session'.
+* Fixed (Potentially): Under certain circumstances, PHP crashes when generating the embedded URI data for overlays, causing the
+web pages not to finish rendering.
+* Changed: Preview image is now centered
+* Added: Support for background opacity
+
+= 0.9.1 (January 5, 2012) =
+
+* Fixed: Overlay images not shown where 'Fileinfo' PHP extension was disabled
+* Added: Better handling of PHP versions older than 5.3, which before caused confusion due to cryptic error messages
+* Added: Support for Custom Post Types (activation and background overrides)
+* Changed: Flickr imports now include the owner, license and link to the original image in the description
+
+= 0.9 (December 30, 2011) =
 * Public BETA release of the plugin
+
+== Frequently Asked Questions ==
+
+= Help, it's broken! What do I do now? =
+
+If something does not appear to be working as it should, [search the forum](http://wordpress.org/tags/background-manager) or [write a new topic](http://wordpress.org/tags/background-manager#postform) that describes the problem(s) you are experiencing. 
+
+It will be very useful to include information about the environment in which the problem occured. If you can still activate and access the __Settings__ page for the plugin, look at the bottom of the page for a __Debug__ link. Clicking it will expand a box with often requested details, such as the WordPress version and what operating system the web server is using. You copy and paste these details when reporting a problem, which will help speed up finding a solution.
 
