@@ -15,7 +15,11 @@
                     {{ __('Preview') }}
                 </th>
                 <td>
-                    <div id="bg_preview"><div id="bg_preview_overlay"></div></div>
+                    <div id="bg_preview_container">
+                        <div id="bg_preview_bg_color"></div>
+                        <div id="bg_preview"></div>
+                        <div id="bg_preview_overlay"></div>
+                    </div>
                 </td>
             </tr>
             <tr valign="top">
@@ -53,7 +57,7 @@
                             <input class="change_freq" type="radio" value="custom" name="change_freq" {% if change_freq == 'custom' %}checked="checked"{% endif %} />
                             <span>{{ __('Every') }}</span>
                         </label>
-                        <input type="text" class="small-text" value="{{ change_freq_custom | default('10') }}" name="change_freq_custom" />
+                        <input type="text" class="small-text" value="{{ change_freq_custom }}" name="change_freq_custom" />
                         <span>{{ __('seconds') }}</span>
                         <span class="description">({{ __('Requires Javascript by the visitor, but will gracefully degrade if not available') }})</span>
                     </fieldset>
@@ -142,6 +146,20 @@
                             <span>{{ __('Full Screen') }}</span>
                         </label>
                     </fieldset>
+                </td>
+            </tr>
+            <tr valign="top" class="bg_fs_layout">
+                <th scope="row">
+                    <label for="background_color">{{ __('Background Image Opacity') }}</label>
+                </th>
+                <td>
+                    <div class="hide-if-js">
+                        <input type="text" value="{{ background_opacity }}" autocomplete="off" name="background_opacity" id="background_opacity" />
+                        <span>%</span>
+                    </div>
+                    <div id="opacity_picker" class="hide-if-no-js"></div>
+                    <span id="opacity_picker_val" class="hide-if-no-js">{{ background_opacity }}%</span>
+                    <span class="description hide-if-js">({{ __('Only available for Full Screen layouts') }})</span>
                 </td>
             </tr>
             <tr valign="top" class="bg_extra_layout">
@@ -312,4 +330,29 @@
     {{ submit_button | raw }}
 
 </form>
+
+<div id="my_footer">
+    <img src="{{ plugin_base_url }}resources/images/myatus_logo_white.png" alt="Myatu's"/><br>
+    <span>
+        <a href="{{ plugin_home }}" target="_blank">{{plugin_name }} {{ plugin_version }}</a> | 
+        <a href="#" id="footer_debug_link">{{ __('Debug') }}</a> | 
+        <a href="http://wordpress.org/extend/plugins/background-manager/" target="_blank">{{ __('Rate It') }}</a> |
+        <a href="http://wordpress.org/tags/background-manager" target="_blank">{{ __('Forum') }}</a>
+    </span>
+</div>
+
+<div id="footer_debug" style="display:none;">
+    <table class="form-table">
+        <tbody>
+            {% for debug_name, debug_value in debug_info %}
+            <tr>    
+                <th scope="row" style="font-weight: bold;">{{ debug_name }}:</th>
+                <td>{{ debug_value }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+
 
