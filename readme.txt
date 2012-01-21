@@ -36,7 +36,10 @@ The home page for [Background Manager](http://j.mp/bgmwp) is also a live demonst
 * Multiple _Image Sets_ to select a random image from
 * Override the _Image Set_ for each Post, Page or Custom post type
 * User defined display interval between the background images (timed slideshow)
-* Fade-in/fade-out effect between the different background images displayed
+* Optional transition effects between the different background images displayed:
+    * Fade-in/Fade-out (Crossfade)
+    * Slide (Top, bottom, left or right)
+    * Cover (Top, bottom, left or right)
 * Pre-defined background overlays
 * Enable or disable the background images on the Front page, Error pages, Custom post types, etc.
 * Optional thumbnail/information tab for the visitor to learn more about the background
@@ -75,9 +78,19 @@ with PHP versions older than 5.3.
 
 == Changelog ==
 
+= 1.0 (January 21, 2012) =
+* Added: Support for additional transition effects for full-screen images, including the ability to disable it.
+* Added: Ability to select transition effect speed.
+* Fixed: Background images were always scaled down to 1024 pixels.
+* Fixed: 'Background' menu entry on front-end admin bar directed user to incorrect URL.
+* Fixed: Under certain conditions, the fade-in of a full-screen image happened too quick after the on-ready `hide()`, causing the image to disappear.
+* Fixed: Full-screen imgLoaded() (JS) event was not unbound at subsequent use, causing undesired results with transition effects.
+* Changed: Using cookies instead of a PHP session to store background image(s) IDs used for the browser session, to better accomodate the EU Directive regarding non-essential cookies.
+* Changed: More fluid crossfading of images
+
 = 0.9.3 (January 14, 2012) =
 * Fixed: Background overrides for individual pages and posts were not honored when 'Select a random image' was set to 'At each browser session'.
-* Fixed (Potentially): Under certain circumstances, PHP crashes when generating the embedded URI data for overlays, causing the
+* Fixed: Under certain circumstances, PHP crashes when generating the embedded URI data for overlays, causing the
 web pages not to finish rendering.
 * Changed: Preview image is now centered
 * Added: Support for background opacity
@@ -98,5 +111,5 @@ web pages not to finish rendering.
 
 If something does not appear to be working as it should, [search the forum](http://wordpress.org/tags/background-manager) or [write a new topic](http://wordpress.org/tags/background-manager#postform) that describes the problem(s) you are experiencing. 
 
-It will be very useful to include information about the environment in which the problem occured. If you can still activate and access the __Settings__ page for the plugin, look at the bottom of the page for a __Debug__ link. Clicking it will expand a box with often requested details, such as the WordPress version and what operating system the web server is using. You copy and paste these details when reporting a problem, which will help speed up finding a solution.
+It will be very useful to include information about the environment in which the problem occured. If you can still activate and access the __Settings__ page for the plugin, look at the bottom of the page for a __Debug__ link. Clicking it will expand a box with often requested details, such as the WordPress version and what operating system the web server is using. You can copy and paste these details when reporting a problem, which will help speed up finding a solution.
 
