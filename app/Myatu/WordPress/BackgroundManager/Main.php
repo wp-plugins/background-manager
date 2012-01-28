@@ -117,6 +117,7 @@ class Main extends \Pf4wp\WordpressPlugin
         'background_position'    => 'top-left',
         'background_repeat'      => 'repeat',
         'background_opacity'     => 100,
+        'overlay_opacity'        => 100,
         'background_transition'  => 'crossfade',
         'transition_speed'       => 600,
         'display_on_front_page'  => true,
@@ -224,6 +225,7 @@ class Main extends \Pf4wp\WordpressPlugin
         $link         = '';
         $thumb        = '';
         $meta         = '';
+        $bg_link      = '';
         
         if ($active_id === false) {
             $gallery_id = apply_filters('myatu_bgm_active_gallery', $this->options->active_gallery);
@@ -323,6 +325,9 @@ class Main extends \Pf4wp\WordpressPlugin
                 $meta = '';
             }
             
+            // Get background link
+            $bg_link = get_post_meta($random_id, Filter\MediaLibrary::META_LINK, true);
+            
             // Get a thumbnail image link
             $thumb = wp_get_attachment_image_src($random_id, 'thumbnail');
             if ($thumb) {
@@ -335,7 +340,7 @@ class Main extends \Pf4wp\WordpressPlugin
             if (($image = get_post($random_id))) {
                 $desc    = $image->post_content;
                 $caption = $image->post_excerpt;
-            }               
+            }
         }
 
         return array(
@@ -347,6 +352,7 @@ class Main extends \Pf4wp\WordpressPlugin
             'link'    => $link, 
             'thumb'   => $thumb,
             'meta'    => $meta,
+            'bg_link' => $bg_link
         );
     }
     
@@ -848,28 +854,18 @@ class Main extends \Pf4wp\WordpressPlugin
     public function onAdminBarMenu($wp_admin_bar)
     {
         try {
-            if (!is_admin() && $wp_admin_bar->get_node('background')) {
+            if (!is_admin() && $wp_admin_bar->get_node('background') && function_exists('get_user_option') && ($home_url = get_user_option('myatu_bgm_home_url'))) {
                 $wp_admin_bar->remove_node('background');
-                
-                $title = __('Background');
-                
-                /* We create a 'fake' menu here, as on the public side, onBuildMenu() will not get called */
-                $menu = new \Pf4wp\Menu\SubHeadMenu($this->getName());
-                $menu->addMenu($title,  array($this, 'onSettingsMenu'));
-                $menu->setType(\Pf4wp\Menu\MenuEntry::MT_THEMES);
-                $menu->display();
                 
                 $wp_admin_bar->add_node(array(
                     'parent' => 'appearance', 
                     'id'     => 'background', 
-                    'title'  => $title,
-                    'href'   => $menu->getParentUrl()
+                    'title'  => __('Background'),
+                    'href'   => $home_url
                 ));
-                
-                unset($menu);
             }
         } catch (\Exception $e) { /* Silent, to prevent public side from becoming inaccessible on error */ }
-    }    
+    }
     
     /**
      * Build the menu
@@ -943,6 +939,12 @@ class Main extends \Pf4wp\WordpressPlugin
                 __('Add New Image Set', $this->getName())
             );
         }
+        
+        // Display is usually called automatically, but we use it to grab the parent menu URL and set it in the user option (varies by translation!)
+        $mymenu->display();
+        
+        if (($user = wp_get_current_user()) instanceof \WP_User)
+            update_user_option($user->ID, 'myatu_bgm_home_url', $mymenu->getParentUrl());
         
         return $mymenu;
     }
@@ -1036,6 +1038,10 @@ class Main extends \Pf4wp\WordpressPlugin
             // Opacity (1-100)
             if (($opacity = (int)$_POST['background_opacity']) <= 100 && $opacity > 0)
                 $this->options->background_opacity = $opacity;
+                
+            if (($opacity = (int)$_POST['overlay_opacity']) <= 100 && $opacity > 0)
+                $this->options->overlay_opacity = $opacity;
+
             
             // Display settings for Custom Post Types
             $display_on = array();
@@ -1108,8 +1114,8 @@ class Main extends \Pf4wp\WordpressPlugin
         // Give the transitions titles
         $bg_transition_titles = array(
             __('-- None (deactivated) --', $this->getName()), __('Random', $this->getName()),
-            __('Slide Down', $this->getName()), __('Slide Up', $this->getName()), __('Slide to Left', $this->getName()), __('Slide to Right', $this->getName()),
-            __('Cover Down', $this->getName()), __('Cover Up', $this->getName()), __('Cover to Left', $this->getName()), __('Cover to Right', $this->getName()),
+            __('Slide Downward', $this->getName()), __('Slide Upward', $this->getName()), __('Slide to Left', $this->getName()), __('Slide to Right', $this->getName()),
+            __('Cover Downward', $this->getName()), __('Cover Upward', $this->getName()), __('Cover to Left', $this->getName()), __('Cover to Right', $this->getName()),
             __('Crossfade', $this->getName()),
         );        
         
@@ -1162,6 +1168,7 @@ class Main extends \Pf4wp\WordpressPlugin
             'background_stretch_vertical'   => $this->options->background_stretch_vertical,
             'background_stretch_horizontal' => $this->options->background_stretch_horizontal,
             'background_opacity'            => $this->options->background_opacity,
+            'overlay_opacity'               => $this->options->overlay_opacity,
             'background_transition'         => $this->options->background_transition,
             'transition_speed'              => ((int)$this->options->transition_speed >= 100 && (int)$this->options->transition_speed <= 7500) ? $this->options->transition_speed : 600,
             'change_freq_custom'            => ((int)$this->options->change_freq_custom >= 10) ? $this->options->change_freq_custom : 10,
@@ -1763,8 +1770,13 @@ class Main extends \Pf4wp\WordpressPlugin
         $overlay = apply_filters('myatu_bgm_active_overlay', $this->options->active_overlay);
         
         // The image for the overlay, as CSS embedded data
-        if ($overlay && ($data = Helpers::embedDataUri($overlay, false, (defined('WP_DEBUG') && WP_DEBUG))) != false)
-            $style .= sprintf('#myatu_bgm_overlay { background: url(\'%s\') repeat fixed top left transparent; }', $data);
+        if ($overlay && ($data = Helpers::embedDataUri($overlay, false, (defined('WP_DEBUG') && WP_DEBUG))) != false) {
+            $opacity = '';
+            if ($this->options->overlay_opacity < 100)
+                $opacity = sprintf('-moz-opacity:.%s; filter:alpha(opacity=%1$s); opacity:.%1$s', str_pad($this->options->overlay_opacity, 2, '0', STR_PAD_LEFT));
+            
+            $style .= sprintf('#myatu_bgm_overlay { background: url(\'%s\') repeat fixed top left transparent; %s }', $data, $opacity);
+        }
         
         // The info icon
         if ($this->options->info_tab) {

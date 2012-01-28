@@ -6,6 +6,9 @@
 #}
 
 <!-- Background Manager Start -->
+{# ------ Background Link ------ #}
+<a id="myatu_bgm_bg_link" class="myatu_bgm_fs" {% if random_image.bg_link %}href="{{ random_image.bg_link }}"{% else %}href="#" style="display:none"{% endif %}></a>
+
 {# ------ Overlay ------ #}
 {% if has_overlay %}<div id="myatu_bgm_overlay" class="myatu_bgm_fs"></div>{% endif %}
 
@@ -17,12 +20,13 @@
 {# UNCOMPRESSED:
 try {
     (function($){
-        $('#myatu_bgm_top').hide().delay(100).imgLoaded(function() {
+        $('#myatu_bgm_top').hide().imgLoaded(function() {
             $(this).fadeIn('slow');
         });
     })(jQuery);
-} catch(e) {}; #}
-try{(function(a){a("#myatu_bgm_top").hide().delay(100).imgLoaded(function(){a(this).fadeIn("slow")})})(jQuery)}catch(e){};
+} catch(e) {};
+#}
+try{(function(a){a("#myatu_bgm_top").hide().imgLoaded(function(){a(this).fadeIn("slow")})})(jQuery)}catch(e){};
 //]]>
 </script>
 {% endif %}

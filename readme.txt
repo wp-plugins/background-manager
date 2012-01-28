@@ -21,11 +21,13 @@ Where supported, in full-screen mode the the background image is "eased in" when
 
 You can also limit the background images to certain parts of WordPress, for example only on the front page or a full-page post. And for each individual page or post, you can also override the images and overlay used as the background, which allows you to have pages or posts with a different background theme.
 
+Each individual background image can also be linked to a specific URL, which allows a visitor to click anywhere on the background and be redirected to another page or website.
+
 All this is done without the need to edit the theme or any other files!
 
 = Demo =
 
-The home page for [Background Manager](http://j.mp/bgmwp) is also a live demonstration of the plugin.
+Visit the [Background Manager Demo Site](http://j.mp/bgmdemo) for a live demonstration of the plugin.
 
 = Features =
 
@@ -40,7 +42,7 @@ The home page for [Background Manager](http://j.mp/bgmwp) is also a live demonst
     * Fade-in/Fade-out (Crossfade)
     * Slide (Top, bottom, left or right)
     * Cover (Top, bottom, left or right)
-* Pre-defined background overlays
+* 18 pre-defined background overlays
 * Enable or disable the background images on the Front page, Error pages, Custom post types, etc.
 * Optional thumbnail/information tab for the visitor to learn more about the background
 * Import from various sources, such as:
@@ -48,6 +50,9 @@ The home page for [Background Manager](http://j.mp/bgmwp) is also a live demonst
    * NextGEN Gallery Plugin
    * WP Flickr Background Plugin
 * Define the background opacity (available in Full Screen only)
+* Background image links (click-able backgrounds)
+* Uses AJAX to load background images, keeping the website's footprint small and improve caching
+* Graceful degradation for visitors without JavaScript
 
 = License =
 
@@ -78,9 +83,20 @@ with PHP versions older than 5.3.
 
 == Changelog ==
 
+= 1.0.6 =
+* __Added:__ Background image links
+* __Added:__ Support for overlay opacity
+* __Added:__ New background overlays
+    * Black and White Grid
+    * Black and White Horizontal Line (dense)
+    * Jeans effect
+* Improved: The Slide and Cover transition effects have been improved, handling various image sizes and smaller browser windows better.
+* Changed: The Preview window on the _Settings_ page will now remain in view, which allows the user to scroll the page down to additional options/settings and see any changes without having to refer back to the Preview.
+* Fixed: 'Background' menu entry on front-end admin bar could potentially cause a fatal error due to unchecked use of admin-privileged function, changed to a user option storing home url instead
+
 = 1.0 (January 21, 2012) =
-* Added: Support for additional transition effects for full-screen images, including the ability to disable it.
-* Added: Ability to select transition effect speed.
+* __Added:__ Support for additional transition effects for full-screen images, including the ability to disable it.
+* __Added:__ Ability to select transition effect speed.
 * Fixed: Background images were always scaled down to 1024 pixels.
 * Fixed: 'Background' menu entry on front-end admin bar directed user to incorrect URL.
 * Fixed: Under certain conditions, the fade-in of a full-screen image happened too quick after the on-ready `hide()`, causing the image to disappear.
@@ -93,17 +109,23 @@ with PHP versions older than 5.3.
 * Fixed: Under certain circumstances, PHP crashes when generating the embedded URI data for overlays, causing the
 web pages not to finish rendering.
 * Changed: Preview image is now centered
-* Added: Support for background opacity
+* __Added:__ Support for background opacity
 
 = 0.9.1 (January 5, 2012) =
 
 * Fixed: Overlay images not shown where 'Fileinfo' PHP extension was disabled
-* Added: Better handling of PHP versions older than 5.3, which before caused confusion due to cryptic error messages
-* Added: Support for Custom Post Types (activation and background overrides)
+* __Added:__ Better handling of PHP versions older than 5.3, which before caused confusion due to cryptic error messages
+* __Added:__ Support for Custom Post Types (activation and background overrides)
 * Changed: Flickr imports now include the owner, license and link to the original image in the description
 
 = 0.9 (December 30, 2011) =
 * Public BETA release of the plugin
+
+== Upgrade Notice ==
+
+= 1.0.6 =
+
+New: Background image links, support for overlay opacity and more overlays. Improved transition effects.
 
 == Frequently Asked Questions ==
 
@@ -112,4 +134,8 @@ web pages not to finish rendering.
 If something does not appear to be working as it should, [search the forum](http://wordpress.org/tags/background-manager) or [write a new topic](http://wordpress.org/tags/background-manager#postform) that describes the problem(s) you are experiencing. 
 
 It will be very useful to include information about the environment in which the problem occured. If you can still activate and access the __Settings__ page for the plugin, look at the bottom of the page for a __Debug__ link. Clicking it will expand a box with often requested details, such as the WordPress version and what operating system the web server is using. You can copy and paste these details when reporting a problem, which will help speed up finding a solution.
+
+= How do my make my backgrounds click-able? =
+
+You can redirect your visitor to a specific URL if they click anywhere on the background by setting the __Background URL__ for an image. Simply edit one of your Image Sets (__Apperance__ -> __Background__ -> __Image Sets__ --> [desired image set]), select an image and click the __Edit__ icon displayed over the image. Provide the URL in the __Background URL__ field and click __Save All Changes__.
 
