@@ -1,9 +1,9 @@
 <?php
 /*
 Plugin Name: Background Manager
-Plugin URI: http://wp.me/p22iJC-10C
+Plugin URI: http://j.mp/bgmwp
 Description: Background Manager allows you to display a random image as the website background at each visit or as a timed slideshow, without the need to edit the theme.
-Version: 0.9
+Version: 1.0.6
 Author: Mike Green (Myatu)
 Author URI: http://www.myatus.co.uk/
 */
@@ -42,4 +42,4 @@ set_include_path(get_include_path() . PATH_SEPARATOR . __DIR__.'/vendor/OAuth/li
 
 /* Fire her up, Scotty! */
 
-Myatu\WordPress\BackgroundManager\Main::register(__FILE__);
+call_user_func('Myatu\\WordPress\\BackgroundManager\\Main::register', __FILE__);

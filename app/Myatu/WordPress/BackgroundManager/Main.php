@@ -11,6 +11,7 @@ namespace Myatu\WordPress\BackgroundManager;
 
 use Pf4wp\Notification\AdminNotice;
 use Pf4wp\Common\Helpers;
+use Pf4wp\Common\Cookies;
 use Pf4wp\Help\ContextHelp;
 
 /* Guided Help using FeaturePointers */
@@ -78,6 +79,14 @@ class Main extends \Pf4wp\WordpressPlugin
     /* Possible info tab locations */
     private $info_tab_locations = array('top-left', 'top-right', 'bottom-left', 'bottom-right');
     
+    /* Possible transition options */
+    private $bg_transitions = array(
+        'none', 'random',
+        'slidedown', 'slideup', 'slideleft', 'slideright',
+        'coverdown', 'coverup', 'coverleft', 'coverright',
+        'crossfade',
+    );
+    
     /** Instance containing current gallery being edited (if any) */
     private $gallery = null;
     
@@ -90,15 +99,15 @@ class Main extends \Pf4wp\WordpressPlugin
     /** The link to the Import menu - @see onBuildMenu() */
     public $import_menu_link  = '';
     
-    /** Cached response of inEdit() - @see inEdit() */
-    private $in_edit;
-    
     /** Instance of Images - @see onAdminInit() */
     public $images;
     
     /** Instance of Galleries - @see onAdminInit() */
     public $galleries;
-    
+
+    /** Non-persistent Cache */
+    private $np_cache = array();
+   
     /** The default options */
     protected $default_options = array(
         'change_freq'            => 'load',      // static::CF_LOAD
@@ -107,6 +116,10 @@ class Main extends \Pf4wp\WordpressPlugin
         'background_scroll'      => 'scroll',    // static::BST_SCROLL
         'background_position'    => 'top-left',
         'background_repeat'      => 'repeat',
+        'background_opacity'     => 100,
+        'overlay_opacity'        => 100,
+        'background_transition'  => 'crossfade',
+        'transition_speed'       => 600,
         'display_on_front_page'  => true,
         'display_on_single_post' => true,
         'display_on_single_page' => true,
@@ -120,7 +133,7 @@ class Main extends \Pf4wp\WordpressPlugin
         
     /* Enable public-side Ajax - @see onAjaxRequest() */
     public $public_ajax = true;
-   
+  
     
     /* ----------- Helpers ----------- */
 
@@ -154,8 +167,8 @@ class Main extends \Pf4wp\WordpressPlugin
         if (!current_user_can('edit_theme_options'))
             return false;
         
-        if (isset($this->in_edit))
-            return ($this->in_edit);
+        if (isset($this->np_cache['in_edit']))
+            return ($this->np_cache['in_edit']);
         
         $edit = (isset($_REQUEST['edit'])) ? trim($_REQUEST['edit']) : '';
         
@@ -187,7 +200,7 @@ class Main extends \Pf4wp\WordpressPlugin
             }
         } // else empty, return default (false)
         
-        $this->in_edit = $result; // Cache response (non-persistent)
+        $this->np_cache['in_edit'] = $result; // Cache response (non-persistent)
         
         return $result;
     }
@@ -198,10 +211,10 @@ class Main extends \Pf4wp\WordpressPlugin
      * @filter myatu_bgm_active_gallery
      * @param string $previous_image The URL of the previous image, if any (to avoid duplicates)
      * @param id $active_id Active gallery, or `false` if to be determined automatically (default)
-     * @param string $size The size of the image to return ('large' by default)
+     * @param string $size The size of the image to return (original size by default)
      * @return array
      */
-    public function getRandomImage($previous_image = '', $active_id = false, $size = 'large')
+    public function getRandomImage($previous_image = '', $active_id = false, $size = false)
     {
         $bailout      = 0; // Loop bailout
         $random_id    = 0;
@@ -212,6 +225,7 @@ class Main extends \Pf4wp\WordpressPlugin
         $link         = '';
         $thumb        = '';
         $meta         = '';
+        $bg_link      = '';
         
         if ($active_id === false) {
             $gallery_id = apply_filters('myatu_bgm_active_gallery', $this->options->active_gallery);
@@ -226,24 +240,32 @@ class Main extends \Pf4wp\WordpressPlugin
             
             switch ($this->options->change_freq) {
                 case static::CF_SESSION:
-                    session_start();
-                                       
-                    // Grab the random image from the session, or new random one if nothing found in saved session
-                    if (isset($_SESSION['myatu_bgm_bg_id'])) {
-                        $random_id = $_SESSION['myatu_bgm_bg_id'];
-                    } else {
-                        $random_id = $this->images->getRandomImageId($gallery_id);
-                    }
-                    $random_image = wp_get_attachment_image_src($random_id, $size);
+                    $cookie_id = 'myatu_bgm_bg_id_' . $gallery_id; // Cookie ID for stored background image ID
                     
-                    if ($random_image) {
-                        // We only need the URL
-                        $random_image = $random_image[0];
-                    
-                        // Save random image in session
-                        $_SESSION['myatu_bgm_bg_id'] = $random_id;
-                    } else {
-                        unset($_SESSION['myatu_bgm_bg_id']); // In case it came form the session
+                    while (true) {
+                        $bailout++;
+                        
+                        $random_id    = Cookies::get($cookie_id, $this->images->getRandomImageId($gallery_id));                       
+                        $random_image = wp_get_attachment_image_src($random_id, $size);
+                        
+                        if ($random_image) {
+                            // We only need the URL
+                            $random_image = $random_image[0];
+                        
+                            // Save random image in cookie
+                            Cookies::set($cookie_id, $random_id, 0, false);
+                            
+                            break;
+                        } else {
+                            // Invalidate cookie
+                            Cookies::delete($cookie_id);
+                        }
+                        
+                        // The bailout clause
+                        if ($bailout > 2) {
+                            $random_image = '';
+                            break;
+                        }
                     }
                     
                     break;
@@ -303,6 +325,9 @@ class Main extends \Pf4wp\WordpressPlugin
                 $meta = '';
             }
             
+            // Get background link
+            $bg_link = get_post_meta($random_id, Filter\MediaLibrary::META_LINK, true);
+            
             // Get a thumbnail image link
             $thumb = wp_get_attachment_image_src($random_id, 'thumbnail');
             if ($thumb) {
@@ -315,7 +340,7 @@ class Main extends \Pf4wp\WordpressPlugin
             if (($image = get_post($random_id))) {
                 $desc    = $image->post_content;
                 $caption = $image->post_excerpt;
-            }               
+            }
         }
 
         return array(
@@ -327,6 +352,7 @@ class Main extends \Pf4wp\WordpressPlugin
             'link'    => $link, 
             'thumb'   => $thumb,
             'meta'    => $meta,
+            'bg_link' => $bg_link
         );
     }
     
@@ -337,14 +363,28 @@ class Main extends \Pf4wp\WordpressPlugin
      */
     public function canDisplayBackground()
     {
-        return (
-            ($this->options->display_on_front_page  && is_front_page()) ||
-            ($this->options->display_on_single_post && is_single())     ||
-            ($this->options->display_on_single_page && is_page())       ||
-            ($this->options->display_on_archive     && is_archive())    ||
-            ($this->options->display_on_search      && is_search())     ||
-            ($this->options->display_on_error       && is_404())
-        );
+        if (isset($this->np_cache['can_display_background']))
+            return($this->np_cache['can_display_background']);
+        
+        // Obtain a list of custom posts that can be displayed (or not)
+        $display_custom_post_types = $this->options->display_custom_post_types;
+        
+        if (is_array($display_custom_post_types) && isset($display_custom_post_types[get_post_type()]))
+            $this->np_cache['can_display_background'] = $display_custom_post_types[get_post_type()];
+        
+        // This isn't a custom post or not specified in settings, so use these
+        if (!isset($this->can_display_background)) {
+            $this->np_cache['can_display_background']  = (
+                ($this->options->display_on_front_page  && is_front_page()) ||
+                ($this->options->display_on_single_post && is_single())     ||
+                ($this->options->display_on_single_page && is_page())       ||
+                ($this->options->display_on_archive     && is_archive())    ||
+                ($this->options->display_on_search      && is_search())     ||
+                ($this->options->display_on_error       && is_404())
+            );
+        }
+
+        return $this->np_cache['can_display_background'];
     }
     
     /**
@@ -365,10 +405,13 @@ class Main extends \Pf4wp\WordpressPlugin
      * Returns a list of galleries, for settings
      *
      * @param int $active_gallery The ID of the active gallery (to set 'select')
-     * @return array Array containing the galleries, by ID, Name and Selected
+     * @return array Array containing the galleries, by ID, Name, Description and Selected
      */
     public function getSettingGalleries($active_gallery)
     {
+        if (isset($this->np_cache['setting_galleries']))
+            return $this->np_cache['setting_galleries'];
+        
         $galleries = array();
         
         $gallery_posts = get_posts(array(
@@ -387,9 +430,13 @@ class Main extends \Pf4wp\WordpressPlugin
             $galleries[] = array(
                 'id'       => $gallery_post->ID,
                 'name'     => sprintf('%s (%d)', $gallery_name, $this->images->getCount($gallery_post->ID)),
+                'desc'     => $gallery_post->post_content,
                 'selected' => ($active_gallery == $gallery_post->ID),
             );
         }
+        
+        // Store into non-persistent cache
+        $this->np_cache['setting_galleries'] = $galleries;
         
         return $galleries;
     }
@@ -408,10 +455,13 @@ class Main extends \Pf4wp\WordpressPlugin
      *
      * @filter myatu_bgm_overlays
      * @param string $active_overlays The active overlay (to set 'select')
-     * @return array Array containing the overlays, by Value, Description and Selected
+     * @return array Array containing the overlays, by Value, Description, Preview (embedded data image preview) and Selected
      */    
     public function getSettingOverlays($active_overlay)
     {
+        if (isset($this->np_cache['overlays']))
+            return $this->np_cache['overlays'];
+        
         $overlays = array();
         $iterator = new \RecursiveIteratorIterator(new \Pf4wp\Storage\IgnorantRecursiveDirectoryIterator($this->getPluginDir() . static::DIR_OVERLAYS, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
         foreach ($iterator as $fileinfo) {
@@ -447,6 +497,9 @@ class Main extends \Pf4wp\WordpressPlugin
         // Sort overlays
         usort($overlays, function($a, $b){ return strcasecmp($a['desc'], $b['desc']); });
 
+        // Store in non-persistent cache
+        $this->np_cache['overlays'] = $overlays;
+        
         return $overlays;
     }
     
@@ -458,6 +511,9 @@ class Main extends \Pf4wp\WordpressPlugin
      */
     protected function getImporters()
     {
+        if (isset($this->np_cache['importers']))
+            return $this->np_cache['importers'];
+        
         $importers = array();
         $iterator  = new \RecursiveIteratorIterator(new \Pf4wp\Storage\IgnorantRecursiveDirectoryIterator($this->getPluginDir() . static::DIR_IMPORTERS, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
         $files     = iterator_to_array(new \RegexIterator($iterator, '/^.+\.php?$/i', \RecursiveRegexIterator::GET_MATCH));
@@ -482,6 +538,9 @@ class Main extends \Pf4wp\WordpressPlugin
         // Sort importers by name
         uasort($importers, function($a, $b){ return strcasecmp($a['name'], $b['name']); });
         
+        // Store in non-persistent cache
+        $this->np_cache['importers'] = $importers;
+        
         return $importers;
     }
     
@@ -504,6 +563,7 @@ class Main extends \Pf4wp\WordpressPlugin
         add_action('get_edit_post_link', array($this, 'onGetEditPostLink'), 10, 3);
         add_action('add_attachment', array($this, 'onAddAttachment'), 20);      // Adds 'Background Image' to Library
         add_action('edit_attachment', array($this, 'onAddAttachment'), 20);
+        add_action('admin_bar_menu', array($this, 'onAdminBarMenu'), 90);
         
         // Register post types
         register_post_type(self::PT_GALLERY, array(
@@ -725,7 +785,24 @@ class Main extends \Pf4wp\WordpressPlugin
                 
                 $prev_image   = $matches[1];
                 $random_image = $this->getRandomImage($prev_image, (int)$data['active_gallery']);
+                
+                // Remove 'meta', as we do not use this in the front-end
+                unset($random_image['meta']);
+                
+                // Add transition type
+                if ($this->options->background_transition == 'random') {
+                    // Filter and select random transition
+                    $transitions = array_diff_key($this->bg_transitions, array('none', 'random'));
+                    $rand_sel    = array_rand($transitions);
 
+                    $random_image['transition'] = $transitions[$rand_sel];
+                } else {
+                    $random_image['transition'] = $this->options->background_transition;
+                }
+                
+                // Add transition speed
+                $random_image['transition_speed'] = ((int)$this->options->transition_speed >= 100 && (int)$this->options->transition_speed <= 7500) ? $this->options->transition_speed : 600;
+                
                 $this->ajaxResponse((object)$random_image, empty($random_image['url']));
                 
                 break;
@@ -769,6 +846,28 @@ class Main extends \Pf4wp\WordpressPlugin
     }
     
     /**
+     * This replaces the `Background` menu on the public Admin Bar with our own, if it is shown
+     *
+     * @param mixed $wp_admin_bar Admin bar object
+     * @internal
+     */
+    public function onAdminBarMenu($wp_admin_bar)
+    {
+        try {
+            if (!is_admin() && $wp_admin_bar->get_node('background') && function_exists('get_user_option') && ($home_url = get_user_option('myatu_bgm_home_url'))) {
+                $wp_admin_bar->remove_node('background');
+                
+                $wp_admin_bar->add_node(array(
+                    'parent' => 'appearance', 
+                    'id'     => 'background', 
+                    'title'  => __('Background'),
+                    'href'   => $home_url
+                ));
+            }
+        } catch (\Exception $e) { /* Silent, to prevent public side from becoming inaccessible on error */ }
+    }
+    
+    /**
      * Build the menu
      */
     public function onBuildMenu()
@@ -776,7 +875,7 @@ class Main extends \Pf4wp\WordpressPlugin
         $mymenu = new \Pf4wp\Menu\SubHeadMenu($this->getName());
         
         // Add settings menu
-        $main_menu = $mymenu->addMenu(__('Background', $this->getName()), array($this, 'onSettingsMenu'));
+        $main_menu = $mymenu->addMenu(__('Background'), array($this, 'onSettingsMenu'));
         $main_menu->page_title = $this->getDisplayName();
         $main_menu->large_icon = 'icon-themes';
         $main_menu->context_help = new ContextHelp($this, 'settings');
@@ -834,13 +933,18 @@ class Main extends \Pf4wp\WordpressPlugin
         // Add an 'Add New Image Set' link to the main title, if not editing an image set
         if (($this->inEdit() && $this->gallery->post_status != 'auto-draft') || (($active_menu = $mymenu->getActiveMenu()) == false) || $active_menu != $gallery_menu) {
             // Replace existing main page title with one that contains a link
-            $main_menu->page_title = sprintf(
-                '%s <a class="add-new-h2" id="add_new_image_set" href="%s">%s</a>',
-                $main_menu->page_title,
+            $main_menu->page_title_extra = sprintf(
+                '<a class="add-new-h2" id="add_new_image_set" href="%s">%s</a>',
                 esc_url($this->edit_gallery_link),
                 __('Add New Image Set', $this->getName())
             );
         }
+        
+        // Display is usually called automatically, but we use it to grab the parent menu URL and set it in the user option (varies by translation!)
+        $mymenu->display();
+        
+        if (($user = wp_get_current_user()) instanceof \WP_User)
+            update_user_option($user->ID, 'myatu_bgm_home_url', $mymenu->getParentUrl());
         
         return $mymenu;
     }
@@ -878,9 +982,26 @@ class Main extends \Pf4wp\WordpressPlugin
         // Extra scripts to include
         list($js_url, $version, $debug) = $this->getResourceUrl();
 
+        // Color picker
         wp_enqueue_script('farbtastic');        
-		wp_enqueue_style('farbtastic');
-        wp_enqueue_script($this->getName() . '-settings', $js_url . 'settings' . $debug . '.js', array($this->getName() . '-functions'), $version);        
+        
+        // Slider
+        wp_enqueue_script('jquery-ui-core');
+        wp_enqueue_script('jquery-ui-mouse');
+        wp_enqueue_script('jquery-ui-widget');
+        wp_enqueue_script('jquery-ui-slider');
+        
+        // Default Functions
+        wp_enqueue_script($this->getName() . '-settings', $js_url . 'settings' . $debug . '.js', array($this->getName() . '-functions'), $version);
+        
+        // Extra CSS to include
+        list($css_url, $version, $debug) = $this->getResourceUrl('css');
+        
+        // Color picker
+        wp_enqueue_style('farbtastic');
+        
+        // Slider
+        wp_enqueue_style('jquery-ui-slider', $css_url . 'vendor/jquery-ui-slider' . $debug . '.css', false, $version);
         
         // Guided Help, Step 1 ("Get Started")
         new PointerAddNewStep1();
@@ -897,6 +1018,8 @@ class Main extends \Pf4wp\WordpressPlugin
             $this->options->background_scroll             = (in_array($_POST['background_scroll'], array(static::BST_FIXED, static::BST_SCROLL))) ? $_POST['background_scroll'] : null;
             $this->options->background_position           = (in_array($_POST['background_position'], $this->bg_positions)) ? $_POST['background_position'] : null;
             $this->options->background_repeat             = (in_array($_POST['background_repeat'], $this->bg_repeats)) ? $_POST['background_repeat'] : null;
+            $this->options->background_transition         = (in_array($_POST['background_transition'], $this->bg_transitions)) ? $_POST['background_transition'] : null;
+            $this->options->transition_speed              = (int)$_POST['transition_speed'];
             $this->options->background_stretch_vertical   = (!empty($_POST['background_stretch_vertical']));
             $this->options->background_stretch_horizontal = (!empty($_POST['background_stretch_horizontal']));
             $this->options->active_overlay                = (string)$_POST['active_overlay'];
@@ -911,6 +1034,25 @@ class Main extends \Pf4wp\WordpressPlugin
             $this->options->info_tab_thumb                = (!empty($_POST['info_tab_thumb']));
             $this->options->info_tab_link                 = (!empty($_POST['info_tab_link']));
             $this->options->info_tab_desc                 = (!empty($_POST['info_tab_desc']));
+            
+            // Opacity (1-100)
+            if (($opacity = (int)$_POST['background_opacity']) <= 100 && $opacity > 0)
+                $this->options->background_opacity = $opacity;
+                
+            if (($opacity = (int)$_POST['overlay_opacity']) <= 100 && $opacity > 0)
+                $this->options->overlay_opacity = $opacity;
+
+            
+            // Display settings for Custom Post Types
+            $display_on = array();
+            
+            foreach (get_post_types(array('_builtin' => false, 'public' => true), 'objects') as $post_type_key => $post_type) {
+                // Iterate over existing custom post types, filtering out whether it can be shown or not
+                if ($post_type_key !== static::PT_GALLERY)
+                    $display_on[$post_type_key] = (!empty($_POST['display_on'][$post_type_key]));
+            }
+            
+            $this->options->display_custom_post_types = $display_on;
             
             // Slightly different, the background color is saved as a theme mod only.
             $background_color = ltrim($_POST['background_color'], '#');            
@@ -929,7 +1071,9 @@ class Main extends \Pf4wp\WordpressPlugin
      */
     public function onSettingsMenu($data, $per_page)
     {
-        // Generate a list of galleries, including a default of "None"
+        global $wp_version;
+        
+        // Generate a list of galleries, including a default of "None", and set a flag if we can use collages
         $galleries = array_merge(array(
             array(
                 'id' => 0, 
@@ -967,6 +1111,49 @@ class Main extends \Pf4wp\WordpressPlugin
             __('Bottom Left', $this->getName()), __('Bottom Right', $this->getName())
         );
         
+        // Give the transitions titles
+        $bg_transition_titles = array(
+            __('-- None (deactivated) --', $this->getName()), __('Random', $this->getName()),
+            __('Slide Downward', $this->getName()), __('Slide Upward', $this->getName()), __('Slide to Left', $this->getName()), __('Slide to Right', $this->getName()),
+            __('Cover Downward', $this->getName()), __('Cover Upward', $this->getName()), __('Cover to Left', $this->getName()), __('Cover to Right', $this->getName()),
+            __('Crossfade', $this->getName()),
+        );        
+        
+        // Grab Custom Post Types
+        $custom_post_types         = array();
+        $display_custom_post_types = $this->options->display_custom_post_types;
+        
+        foreach (get_post_types(array('_builtin' => false, 'public' => true), 'objects') as $post_type_key => $post_type) {
+            if ($post_type_key !== static::PT_GALLERY)
+                $custom_post_types[$post_type_key] = array(
+                    'name'    => $post_type->labels->name,
+                    'display' => (isset($display_custom_post_types[$post_type_key])) ? $display_custom_post_types[$post_type_key] : true,
+                );
+        }
+        
+        // Generate some debug information
+        $plugin_version = \Pf4wp\Info\PluginInfo::getInfo(false, $this->getPluginBaseName(), 'Version');
+        $active_plugins = array();
+        
+        foreach (\Pf4wp\Info\PluginInfo::getInfo(true) as $plugin)
+            $active_plugins[] = sprintf("'%s' by %s", $plugin['Name'], $plugin['Author']);
+            
+        $debug_info = array(
+            'Generated On'                       => gmdate('D, d M Y H:i:s') . ' GMT',
+            $this->getDisplayName() . ' Version' => $plugin_version,
+            'PHP Version'                        => PHP_VERSION,
+            'Available PHP Extensions'           => implode(', ', get_loaded_extensions()),
+            'Pf4wp Version'                      => PF4WP_VERSION,
+            'Pf4wp APC Enabled'                  => (PF4WP_APC) ? 'Yes' : 'No',
+            'WordPress Version'                  => $wp_version,
+            'WordPress Debug Mode'               => (defined('WP_DEBUG') && WP_DEBUG) ? 'Yes' : 'No',
+            'Active WordPress Theme'             => get_current_theme(),
+            'Active Wordpress Plugins'           => implode(', ', $active_plugins),
+            'Browser'                            => $_SERVER['HTTP_USER_AGENT'],
+            'Server'                             => $_SERVER['SERVER_SOFTWARE'],
+            'Server OS'                          => php_uname(),
+        );        
+        
         // Template exports:
         $vars = array(
             'nonce'                         => wp_nonce_field('onSettingsMenu', '_nonce', true, false),
@@ -980,7 +1167,11 @@ class Main extends \Pf4wp\WordpressPlugin
             'background_repeat'             => $this->options->background_repeat,
             'background_stretch_vertical'   => $this->options->background_stretch_vertical,
             'background_stretch_horizontal' => $this->options->background_stretch_horizontal,
-            'change_freq_custom'            => $this->options->change_freq_custom,
+            'background_opacity'            => $this->options->background_opacity,
+            'overlay_opacity'               => $this->options->overlay_opacity,
+            'background_transition'         => $this->options->background_transition,
+            'transition_speed'              => ((int)$this->options->transition_speed >= 100 && (int)$this->options->transition_speed <= 7500) ? $this->options->transition_speed : 600,
+            'change_freq_custom'            => ((int)$this->options->change_freq_custom >= 10) ? $this->options->change_freq_custom : 10,
             'change_freq'                   => $this->options->change_freq,
             'display_on_front_page'         => $this->options->display_on_front_page,
             'display_on_single_post'        => $this->options->display_on_single_post,
@@ -988,6 +1179,7 @@ class Main extends \Pf4wp\WordpressPlugin
             'display_on_archive'            => $this->options->display_on_archive,
             'display_on_search'             => $this->options->display_on_search,
             'display_on_error'              => $this->options->display_on_error,
+            'custom_post_types'             => $custom_post_types,
             'info_tab'                      => $this->options->info_tab,
             'info_tab_location'             => $this->options->info_tab_location,
             'info_tab_thumb'                => $this->options->info_tab_thumb,
@@ -995,7 +1187,13 @@ class Main extends \Pf4wp\WordpressPlugin
             'info_tab_desc'                 => $this->options->info_tab_desc,
             'bg_positions'                  => array_combine($this->bg_positions, $bg_position_titles),
             'bg_repeats'                    => array_combine($this->bg_repeats, $bg_repeat_titles),
+            'bg_transitions'                => array_combine($this->bg_transitions, $bg_transition_titles),
             'info_tab_locations'            => array_combine($this->info_tab_locations, $info_tab_location_titles),
+            'plugin_base_url'               => $this->getPluginUrl(),
+            'debug_info'                    => $debug_info,
+            'plugin_name'                   => $this->getDisplayName(),
+            'plugin_version'                => $plugin_version,
+            'plugin_home'                   => \Pf4wp\Info\PluginInfo::getInfo(false, $this->getPluginBaseName(), 'PluginURI'),
         );
         
         $this->template->display('settings.html.twig', $vars);
@@ -1233,7 +1431,7 @@ class Main extends \Pf4wp\WordpressPlugin
         
         $vars = array(
             'nonce'           => wp_nonce_field('onImportMenu', '_nonce', true, false),
-            'submit_button'   => get_submit_button('Continue Import'),
+            'submit_button'   => get_submit_button(__('Continue Import', $this->getName())),
             'importers'       => $importers,
             'importer'        => $importer,
             'show_pre_import' => (!empty($importer) && !empty($pre_import)),
@@ -1499,6 +1697,10 @@ class Main extends \Pf4wp\WordpressPlugin
     {
         if (!$this->canDisplayBackground())
             return;
+        
+        // If image is selected per browser session, set a cookie now (before headers are sent)
+        if ($this->options->change_freq == static::CF_SESSION)
+            $this->getRandomImage();
 
         /* Only load the scripts if: 
          * - there's custom change frequency
@@ -1568,8 +1770,13 @@ class Main extends \Pf4wp\WordpressPlugin
         $overlay = apply_filters('myatu_bgm_active_overlay', $this->options->active_overlay);
         
         // The image for the overlay, as CSS embedded data
-        if ($overlay && ($data = Helpers::embedDataUri($overlay, false, (defined('WP_DEBUG') && WP_DEBUG))) != false)
-            $style .= sprintf('#myatu_bgm_overlay { background: url(\'%s\') repeat fixed top left transparent; }', $data);
+        if ($overlay && ($data = Helpers::embedDataUri($overlay, false, (defined('WP_DEBUG') && WP_DEBUG))) != false) {
+            $opacity = '';
+            if ($this->options->overlay_opacity < 100)
+                $opacity = sprintf('-moz-opacity:.%s; filter:alpha(opacity=%1$s); opacity:.%1$s', str_pad($this->options->overlay_opacity, 2, '0', STR_PAD_LEFT));
+            
+            $style .= sprintf('#myatu_bgm_overlay { background: url(\'%s\') repeat fixed top left transparent; %s }', $data, $opacity);
+        }
         
         // The info icon
         if ($this->options->info_tab) {
@@ -1612,6 +1819,7 @@ class Main extends \Pf4wp\WordpressPlugin
             'info_tab_link'  => $this->options->info_tab_link,
             'info_tab_desc'  => $this->options->info_tab_desc,
             'has_overlay'    => ($overlay != false),
+            'opacity'        => str_pad($this->options->background_opacity, 2, '0', STR_PAD_LEFT), // Only available to full size background
             'is_fullsize'    => $this->options->background_size == static::BS_FULL,
             'random_image'   => $this->getRandomImage(),
         );
