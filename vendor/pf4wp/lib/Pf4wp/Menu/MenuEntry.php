@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -38,9 +38,19 @@ class MenuEntry
     
     const PER_PAGE_SUFFIX = '_per_page';
     
+    /** Hook returned by WordPress
+     * @internal
+     */
     private $hook = false;
+    
+    /** Set if the menu entry has been displayed
+     * @internal
+     */
     private $displayed = false;
 
+    /** The textdomain for translations
+     * @internal
+     */
     protected $textdomain = '';
     
     /** Internal properties, best not modified directly */
@@ -69,6 +79,9 @@ class MenuEntry
     
     /** The page title to be displayed on the page for this menu entry */
     public $page_title = '';
+    
+    /** Extra string to add to the page title (this is _not_ rendered as a `<title>`) */
+    public $page_title_extra = '';
 
     /** The large icon to be displayed on the page for this menu entry */
     public $large_icon = '';
@@ -120,6 +133,7 @@ class MenuEntry
     /**
      * Returns the (parent) slug of this menu.
      *
+     * @param bool $parent Whether to return the slug of the parent menu entry, or this current menu entry (default)
      * @return string
      */
     public function getSlug($parent = false)
@@ -337,7 +351,7 @@ class MenuEntry
         printf('<div class="icon32" %s><br /></div>', (isset($icon)) ? $icon : 'id="icon-options-general"');
 
         // Render title
-        printf('<h2>%s</h2>', $this->page_title);
+        printf('<h2>%s%s</h2>', $this->page_title, $this->page_title_extra);
         
         // Render output of before_callback
         echo $before_callback_output;
