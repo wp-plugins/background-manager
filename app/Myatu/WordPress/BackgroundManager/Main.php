@@ -409,15 +409,21 @@ class Main extends \Pf4wp\WordpressPlugin
      */
     public function getSettingGalleries($active_gallery)
     {
-        if (isset($this->np_cache['setting_galleries']))
-            return $this->np_cache['setting_galleries'];
+        if (isset($this->np_cache['setting_galleries'])) {
+            $galleries = $this->np_cache['setting_galleries'];
+            
+            foreach ($galleries as $gallery_idx => $gallery)
+                $galleries[$gallery_idx]['selected'] = ($active_gallery == $gallery['id']);
+                
+            return $galleries;
+        }
         
         $galleries = array();
         
         $gallery_posts = get_posts(array(
             'orderby' => 'title',
             'order' => 'ASC',
-            'numberposts' => 0, 
+            'numberposts' => -1, 
             'post_type' => static::PT_GALLERY)
         );
         
@@ -459,8 +465,20 @@ class Main extends \Pf4wp\WordpressPlugin
      */    
     public function getSettingOverlays($active_overlay)
     {
-        if (isset($this->np_cache['overlays']))
-            return $this->np_cache['overlays'];
+        // Return from cache
+        if (isset($this->np_cache['overlays'])) {
+            $overlays = $this->np_cache['overlays'];
+            
+            // Ensure we have a 'selected' item.
+            foreach ($overlays as $overlay_key => $overlay)
+                if (!isset($overlay['value']) || !isset($overlay['desc'])) {
+                    unset($overlays[$overlay_key]);
+                } else {
+                    $overlays[$overlay_key]['selected'] = ($active_overlay == $overlay['value']);
+                }
+                
+            return $overlays;
+        }
         
         $overlays = array();
         $iterator = new \RecursiveIteratorIterator(new \Pf4wp\Storage\IgnorantRecursiveDirectoryIterator($this->getPluginDir() . static::DIR_OVERLAYS, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
@@ -573,7 +591,8 @@ class Main extends \Pf4wp\WordpressPlugin
             ),
             'public'              => true,             // Make it available in the Admin 'attach' feature of the Media Library
             'exclude_from_search' => true,             // But hide it from the front-end search...
-            'publicly_queryable'  => false,            // ...and front-end query (display)
+            'publicly_queryable'  => false,            // ...and front-end query (display)...
+            'show_in_nav_menus'   => false,            // ...and hide it as a menu...
             'show_ui'             => false,            // Don't generate its own UI in the Admin
             'hierarchical'        => false,
             'rewrite'             => false,
@@ -596,11 +615,14 @@ class Main extends \Pf4wp\WordpressPlugin
                 if (!empty($referer_arg) && strpos($referer_arg, '=') !== false) {
                     list($arg_name, $arg_value) = explode('=', $referer_arg);
                     if ($arg_name == 'filter') {
-                        $filters = array_merge($filters, explode(',', $arg_value));
+                        $filters = array_replace($filters, explode(',', $arg_value));
                         break;
                     }
                 }
         }
+        
+        // Remove any possible duplicates
+        $filters = array_unique($filters);
         
         foreach ($filters as $filter)
             switch ($filter) {
@@ -656,6 +678,8 @@ class Main extends \Pf4wp\WordpressPlugin
             new Meta\Submit($this);
             new Meta\Stylesheet($this);
             new Meta\Single($this); // for Posts and Pages
+            new Meta\Tags($this);
+            new Meta\Categories($this);
         }
     }
     
@@ -667,6 +691,8 @@ class Main extends \Pf4wp\WordpressPlugin
         // This activates the *filters* provided by the Meta Boxes
         new Meta\Stylesheet($this);
         new Meta\Single($this);
+        new Meta\Tags($this);
+        new Meta\Categories($this);
     }
     
     /**
@@ -1071,7 +1097,7 @@ class Main extends \Pf4wp\WordpressPlugin
      */
     public function onSettingsMenu($data, $per_page)
     {
-        global $wp_version;
+        global $wp_version, $wpdb;
         
         // Generate a list of galleries, including a default of "None", and set a flag if we can use collages
         $galleries = array_merge(array(
@@ -1132,7 +1158,7 @@ class Main extends \Pf4wp\WordpressPlugin
         }
         
         // Generate some debug information
-        $plugin_version = \Pf4wp\Info\PluginInfo::getInfo(false, $this->getPluginBaseName(), 'Version');
+        $plugin_version = $this->getVersion();
         $active_plugins = array();
         
         foreach (\Pf4wp\Info\PluginInfo::getInfo(true) as $plugin)
@@ -1152,6 +1178,7 @@ class Main extends \Pf4wp\WordpressPlugin
             'Browser'                            => $_SERVER['HTTP_USER_AGENT'],
             'Server'                             => $_SERVER['SERVER_SOFTWARE'],
             'Server OS'                          => php_uname(),
+            'Database Version'                   => $wpdb->get_var('SELECT VERSION()'),
         );        
         
         // Template exports:
@@ -1491,7 +1518,7 @@ class Main extends \Pf4wp\WordpressPlugin
         
         // Iframes
         $images_iframe_src = add_query_arg(array('iframe' => 'images', 'edit' => $this->gallery->ID, 'orderby' => false, 'order' => false, 'pp' => $per_page, 'paged' => false));
-        $image_edit_src    = add_query_arg(array('iframe' => 'edit_image', 'edit' => false, 'orderby' => false, 'order' => false, 'post_id' => 0, 'filter' => Filter\MediaLibrary::FILTER));
+        $image_edit_src    = add_query_arg(array('iframe' => 'edit_image', 'edit' => false, 'orderby' => false, 'order' => false, 'post_id' => $this->gallery->ID, 'filter' => Filter\MediaLibrary::FILTER));
         
         $vars = array(
             'has_right_sidebar' => ($columns == 2) ? 'has-right-sidebar' : '',

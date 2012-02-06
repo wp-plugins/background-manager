@@ -27,6 +27,17 @@ class Flickr extends Importer
 {
     const NAME = 'Flickr Photo Sets';
     const DESC = 'Imports photo sets at from Flickr. This product uses the Flickr API but is not endorsed or certified by Flickr.';
+    
+    /**
+     * Check if the user has permission to add (upload) files
+     */
+    static public function active()
+    {
+        if (!current_user_can('upload_files')) 
+            return false;
+            
+        return true;
+    }
        
     /**
      * Pre-import settings
@@ -42,9 +53,15 @@ class Flickr extends Importer
         $vars   = array();
         $tokens = false;
         
+        // Domain
+        $domain = '';
+        if (preg_match('#^http[s]?:\/\/.+?(?=\/|$)#i', get_site_url(), $matches))
+            list($domain) = $matches;
+
         // Callback URL
         $importer     = is_array($class = explode('\\', get_class())) ? $class[count($class)-1] : 'Flickr';
-        $callback_url = add_query_arg(array(
+        $callback_url = $domain . add_query_arg(array(
+            'logout'   => false,
             'importer' => $importer,
             '_nonce'   => wp_create_nonce('onImportMenu'),
         ));
@@ -66,7 +83,7 @@ class Flickr extends Importer
             } else if ($do_login = ($_REQUEST['do_login'] == 'yes')) {
                 // User has decided to login to Flickr
                 
-                $url = $flickr->getAuthorizeUrl(get_site_url(null, '', 'admin') . $callback_url);
+                $url = $flickr->getAuthorizeUrl($callback_url);
                 
                 if ($url) {
                     $vars['auth_redir'] = $url;
@@ -219,18 +236,8 @@ class Flickr extends Importer
                 
                 // If we have an URL, download it and insert the photo into the local Image Set
                 if (!empty($image_url)) {
-                    $tmp = download_url($image_url);
-                    
-                    if (!is_wp_error($tmp)) {
-                        $id = media_handle_sideload(array('name' => basename($image_url), 'tmp_name' => $tmp), $gallery_id, null, array('post_title' => $title, 'post_content' => $description));
-                        
-                        if (is_wp_error($id))
-                            $failed++; // Failed to sideload media
-                    } else {
-                        $failed++; // Failed to download media
-                    }
-                    
-                    @unlink($tmp); // Remove temporary file if it still exists
+                    if (!Images::importImage($image_url, $gallery_id, $title, $description))
+                        $failed++;
                 }
                 
                 // Update progress bar
@@ -248,5 +255,7 @@ class Flickr extends Importer
         
         if ($failed > 0)
             $main->addDelayedNotice(sprintf(__('%d photos could not be added.', $main->getName()), $failed), true);
+        
+        $main->addDelayedNotice(__('Completed import from Flickr', $main->getName()));
     }
 }

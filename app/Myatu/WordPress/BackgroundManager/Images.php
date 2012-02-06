@@ -142,4 +142,75 @@ class Images
     {
         return count($this->getAllImageIds($id));
     }
+    
+    /**
+     * Imports an image into the specified Gallery
+     *
+     * @since 1.0.11
+     * @param string $file Path or URL to the file
+     * @param int $id ID of the Gallery (image set)
+     * @param string $title Optional title of the image
+     * @param string $desc Optional description of the image
+     * @param string $alttext Optional alternative text for the image
+     * @param array $extra_post_data Optional array containing additional post data
+     * @return int|bool Returns the ID of the imported image, or `false` on error
+     */
+    static public function importImage($file, $id, $title = '', $desc = '', $alttext = '', $extra_post_data = array())
+    {
+        $result    = false;
+        $temp_file = false;
+        
+        if ($id && $file) {
+            // Determine if we need to download the file first
+            if (preg_match('#http[s]?:\/\/#i', $file)) {
+                // It's a URL, dowload it
+                $temp_file = download_url($file);
+                
+                if (!file_is_valid_image($temp_file)) {
+                    // Downloaded file is not a valid image, invalidate $temp_file
+                    @unlink($temp_file);
+                    $temp_file = false;
+                }
+            } else {
+                // It's not a URL, make a copy of the orignal file if possible (as side-loading deletes it otherwise)
+                if (@is_readable($file) && file_is_valid_image($file)) {
+                    $temp_file = trailingslashit(sys_get_temp_dir()) . 'bgm' . mt_rand(10000, 99999) . basename($file);
+                    
+                    if (!copy($file, $temp_file)) {
+                        // Invalidate $temp_file if we could not create a temporary copy of the image file
+                        @unlink($temp_file);
+                        $temp_file = false;                        
+                    }
+                }
+            }
+            
+            if ($temp_file) {
+                $post_data = array();
+                
+                if ($title)
+                    $post_data['post_title'] = $title;
+                    
+                if ($desc)
+                    $post_data['post_content'] = $desc;
+                
+                // Allow extra post data to overwrite/add to existing post data
+                $post_data = array_merge($post_data, $extra_post_data);
+                
+                // Sideload the image
+                $id = media_handle_sideload(array('name' => basename($file), 'tmp_name' => $temp_file), $id, null, $post_data);
+                
+                if (!is_wp_error($id)) {
+                    $result = $id;
+                
+                    // Add the alt text
+                    if ($alttext)
+                        update_post_meta($id, '_wp_attachment_image_alt', $alttext);
+                }                   
+            }
+                
+            @unlink($temp_file); // Ensure the temp file cleaned up
+        }
+        
+        return $result;
+    }
 }

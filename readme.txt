@@ -36,7 +36,7 @@ Visit the [Background Manager Demo Site](http://j.mp/bgmdemo) for a live demonst
 * Full control over position for images in normal display mode (tiling, positioning, scrolling and stretching)
 * "Ease in" of a full-screen background image
 * Multiple _Image Sets_ to select a random image from
-* Override the _Image Set_ for each Post, Page or Custom post type
+* Override the _Image Set_ for each Post, Page, Custom post type or by Tag(s) or Category
 * User defined display interval between the background images (timed slideshow)
 * Optional transition effects between the different background images displayed:
     * Fade-in/Fade-out (Crossfade)
@@ -46,9 +46,10 @@ Visit the [Background Manager Demo Site](http://j.mp/bgmdemo) for a live demonst
 * Enable or disable the background images on the Front page, Error pages, Custom post types, etc.
 * Optional thumbnail/information tab for the visitor to learn more about the background
 * Import from various sources, such as:
-   * Flickr (including license and ownership)
-   * NextGEN Gallery Plugin
-   * WP Flickr Background Plugin
+    * Flickr (including license and ownership)
+    * NextGEN Gallery Plugin
+    * WP Flickr Background Plugin
+    * A directory (and optionally its sub-directories) on the web server
 * Define the background opacity (available in Full Screen only)
 * Background image links (click-able backgrounds)
 * Uses AJAX to load background images, keeping the website's footprint small and improve caching
@@ -82,6 +83,16 @@ with PHP versions older than 5.3.
 2. Editing an Image Set within Background Manager
 
 == Changelog ==
+
+= 1.0.14 (February 6, 2012) =
+* __Added:__ Allow overriding the background _Image Set_ and/or _Overlay_ by the post's _Tag(s)_ or _Category_
+* __Added:__ Ability to download an image directly from an external source (URL) to the Image Set/Media Library, with support for Flickr.
+* __Added:__ Ability to copy images from the Media Library already attached to other posts, pages or image sets.
+* __Added:__ Importer for (sub)directories on the web server
+* Changed: Extra user capability checks for Importers
+* Fixed: Not all Image Sets were shown in the Settings (system dependent)
+* Fixed: Flickr Importer authorization and logout URLs
+* Fixed: 'Add to Image Set' button was missing from Media Library when adding images to an Image Set
 
 = 1.0.6 (January 28, 2012) =
 * __Added:__ Background image links
@@ -122,6 +133,9 @@ web pages not to finish rendering.
 * Public BETA release of the plugin
 
 == Upgrade Notice ==
+
+= 1.0.12 =
+New: Override Image Sets by Post Tags or Categories; Download Images by URL (with Flickr support); Copy existing Media Library images; Import a local (server) directory
 
 = 1.0.6 =
 
