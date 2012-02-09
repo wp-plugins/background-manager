@@ -80,9 +80,15 @@ with PHP versions older than 5.3.
 == Screenshots ==
 
 1. A full-screen background behind the TwentyEleven theme, with the a thumbnail preview in the lower-left corner
-2. Editing an Image Set within Background Manager
+2. The main settings of Background Manager
+3. Editing an Image Set within Background Manager
 
 == Changelog ==
+
+= 1.0.17 =
+* Changed: Tag and Category overrides now also apply to their respective archive pages
+* Changed: Individual Post overrides now take priority over Tag or Category overrides
+* Fixed: Minor error where there was no test for btOff() in public script before using
 
 = 1.0.14 (February 6, 2012) =
 * __Added:__ Allow overriding the background _Image Set_ and/or _Overlay_ by the post's _Tag(s)_ or _Category_
@@ -134,7 +140,7 @@ web pages not to finish rendering.
 
 == Upgrade Notice ==
 
-= 1.0.12 =
+= 1.0.14 =
 New: Override Image Sets by Post Tags or Categories; Download Images by URL (with Flickr support); Copy existing Media Library images; Import a local (server) directory
 
 = 1.0.6 =
