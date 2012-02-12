@@ -6,12 +6,15 @@
 #}
 
 <!-- Background Manager Start -->
+{# ------ Background Link ------ #}
+<a id="myatu_bgm_bg_link" class="myatu_bgm_fs" {% if random_image.bg_link %}href="{{ random_image.bg_link }}"{% else %}href="#" style="display:none"{% endif %}></a>
+
 {# ------ Overlay ------ #}
 {% if has_overlay %}<div id="myatu_bgm_overlay" class="myatu_bgm_fs"></div>{% endif %}
 
 {# ------ Full-size Image ------ #}
 {% if is_fullsize %}
-<img id="myatu_bgm_top" class="myatu_bgm_fs" src="{{ random_image.url }}" alt="{{ random_image.alt }}" />
+<img id="myatu_bgm_top" class="myatu_bgm_fs" src="{{ random_image.url }}" alt="{{ random_image.alt }}" {% if opacity < 100 %}style="-moz-opacity:.{{ opacity }}; filter:alpha(opacity={{ opacity }}); opacity:.{{ opacity }};"{% endif %}  />
 <script type="text/javascript">
 //<![CDATA[
 {# UNCOMPRESSED:
@@ -21,7 +24,8 @@ try {
             $(this).fadeIn('slow');
         });
     })(jQuery);
-} catch(e) {}; #}
+} catch(e) {};
+#}
 try{(function(a){a("#myatu_bgm_top").hide().imgLoaded(function(){a(this).fadeIn("slow")})})(jQuery)}catch(e){};
 //]]>
 </script>
