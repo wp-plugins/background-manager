@@ -54,6 +54,7 @@ Visit the [Background Manager Demo Site](http://j.mp/bgmdemo) for a live demonst
 * Background image links (click-able backgrounds)
 * Uses AJAX to load background images, keeping the website's footprint small and improve caching
 * Graceful degradation for visitors without JavaScript
+* Option to add a "Pin It" Pinterest button
 
 = License =
 
@@ -84,6 +85,12 @@ with PHP versions older than 5.3.
 3. Editing an Image Set within Background Manager
 
 == Changelog ==
+
+= 1.0.22 (February 18, 2012) =
+* __Added:__ Support for the Pinterest "Pin It" button
+* Changed: Replaced bt (jQuery BalloonTip) in favor of qTip2
+* Changed: If no image caption is specified, the title will be used instead
+* Changed: Updated Pf4wp and Twig vendor libraries
 
 = 1.0.18 (February 12, 2012) =
 * Changed: Added Categories and Tags columns to Image Set/Trash listings

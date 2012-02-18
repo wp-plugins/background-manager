@@ -98,6 +98,8 @@ abstract class Twig_Template implements Twig_TemplateInterface
      */
     public function displayParentBlock($name, array $context, array $blocks = array())
     {
+        $name = (string) $name;
+        
         if (isset($this->traits[$name])) {
             $this->traits[$name][0]->displayBlock($name, $context, $blocks);
         } elseif (false !== $parent = $this->getParent($context)) {
@@ -119,6 +121,8 @@ abstract class Twig_Template implements Twig_TemplateInterface
      */
     public function displayBlock($name, array $context, array $blocks = array())
     {
+        $name = (string) $name;
+        
         if (isset($blocks[$name])) {
             $b = $blocks;
             unset($b[$name]);
@@ -189,7 +193,7 @@ abstract class Twig_Template implements Twig_TemplateInterface
      */
     public function hasBlock($name)
     {
-        return isset($this->blocks[$name]);
+        return isset($this->blocks[(string) $name]);
     }
 
     /**
@@ -427,8 +431,9 @@ abstract class Twig_Template implements Twig_TemplateInterface
 
         $ret = call_user_func_array(array($object, $method), $arguments);
 
+        // hack to be removed when macro calls are refactored
         if ($object instanceof Twig_TemplateInterface) {
-            return new Twig_Markup($ret);
+            return $ret === '' ? '' : new Twig_Markup($ret, $this->env->getCharset());
         }
 
         return $ret;
