@@ -86,6 +86,9 @@ with PHP versions older than 5.3.
 
 == Changelog ==
 
+= 1.0.22.1 (February 20, 2012) =
+* Fixed: MSIE encountered Javascript runtime errors due to non-closure of object/array elements
+
 = 1.0.22 (February 18, 2012) =
 * __Added:__ Support for the Pinterest "Pin It" button
 * Changed: Replaced bt (jQuery BalloonTip) in favor of qTip2
