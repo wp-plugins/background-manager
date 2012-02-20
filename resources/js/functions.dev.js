@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -21,9 +21,9 @@ mainWin = window.dialogArguments || opener || parent || top;
         scrollTo : function(obj){ $(this).clearQueue().animate({scrollTop: $(obj).offset().top}, 'fast'); return $(this); },
         
         /**
-         * Provided by Paul Irish (MIT License)
+         * Based on code by Paul Irish (MIT License)
          *
-         * Same as load(), but supports cached images
+         * Same as load(), but supports cached images. Only activated when DOM is ready.
          *
          * @link https://github.com/paulirish/jquery.imgloaded
          */
@@ -32,14 +32,18 @@ mainWin = window.dialogArguments || opener || parent || top;
 
             elems.bind('load', function(e) {
                 if (fireOne) {
-                    !elemsLen-- && callback.call(elems, e);
+                    !elemsLen-- && callback.call(elems);
                 } else {
-                    callback.call(this, e);
+                    callback.call(this);
                 }
-            }).each(function() {
-                if (this.complete || this.complete === undefined) {
-                    this.src = this.src;
-                }
+            });
+
+            $(function() {
+                elems.each(function() {
+                    if (this.complete === undefined || this.complete || this.readyState === 4) {
+                        callback.call(this);
+                    }
+                });
             });
         }
     });
@@ -81,7 +85,7 @@ mainWin = window.dialogArguments || opener || parent || top;
             });
 
             return resp;
-        },
+        }
 
     } // myatu_bgm NS
 

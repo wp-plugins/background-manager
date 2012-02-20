@@ -1,5 +1,5 @@
-/*
- * Copyright (c) 2011 Mike Green <myatus@gmail.com>
+/*!
+ * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -24,6 +24,15 @@
         left: 50%;
         margin-left: -512px;
     }
+}
+
+#myatu_bgm_pin_it_btn {
+    display: block;
+    height: 25px !important;
+    width: 45px !important;
+    padding: 0 !important;
+    position: fixed !important;
+    z-index: 19999;
 }
 
 #myatu_bgm_info_tab {
@@ -53,8 +62,13 @@
 }
 
 .myatu_bgm_info_tab_content {
+    color: #eee;
     font-size: 10px;
     font-family: "Lucida Grande",Helvetica,Arial,Verdana,sans-serif;
+}
+
+.myatu_bgm_info_tab_content a {
+    color: #aaa;
 }
 
 .myatu_bgm_info_tab_content img {
@@ -76,6 +90,10 @@
 
 .myatu_bgm_info_tab_desc {
     margin-right: 10px;
+}
+
+#myatu_bgm_bg_link {
+    z-index: -1996;
 }
 
 #myatu_bgm_overlay {
