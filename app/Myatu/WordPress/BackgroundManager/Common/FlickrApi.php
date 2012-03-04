@@ -23,6 +23,7 @@ use Myatu\WordPress\BackgroundManager\Main;
 class FlickrApi
 {
     protected $owner;
+    protected $licenses = array();
     
     // Flickr URLs
     const FLICKR_TOKEN_URL  = 'http://www.flickr.com/services/oauth/request_token';
@@ -48,7 +49,7 @@ class FlickrApi
      * @param string $callback_url Callback URL
      * @return bool|string Returns the URL where to authorize the user (redirect to), or false on error
      */
-    function getAuthorizeUrl($callback_url = 'oob')
+    public function getAuthorizeUrl($callback_url = 'oob')
     {
         try {
             $consumer = new \HTTP_OAuth_Consumer($this->key, $this->secret);
@@ -65,13 +66,17 @@ class FlickrApi
         
         $this->owner->options->flickr_api = $tokens;
         
-        return $consumer->getAuthorizeUrl(static::FLICKR_AUTH_URL, array('perms' => 'read')); // Read Only
+        $auth_url = $consumer->getAuthorizeUrl(static::FLICKR_AUTH_URL, array('perms' => 'read')); // Read Only
+        
+        unset($consumer); // Clear
+        
+        return $auth_url; 
     }
     
     /**
      * Deletes the access tokens
      */
-    function deleteAccessTokens()
+    public function deleteAccessTokens()
     {
         $this->owner->options->flickr_api = null;
     }
@@ -81,7 +86,7 @@ class FlickrApi
      *
      * @return bool|string Returns the access tokens, or false if autorization process has not been started yet
      */
-    function getAccessTokens()
+    public function getAccessTokens()
     {
         $tokens = $this->owner->options->flickr_api;
         
@@ -100,7 +105,7 @@ class FlickrApi
                 $consumer->getAccessToken(static::FLICKR_ACCESS_URL, $_REQUEST['oauth_verifier']);
             } else {
                 return false;
-            }                
+            }
         } catch (\Exception $e) {
             return false;
         }
@@ -119,6 +124,8 @@ class FlickrApi
         
         $this->owner->options->flickr_api = $tokens;
         
+        unset($consumer); // Clear
+        
         return $tokens;
     }
     
@@ -127,7 +134,7 @@ class FlickrApi
      *
      * @returns bool
      */
-    function hasValidAccessTokens()
+    public function hasValidAccessTokens()
     {
         $valid  = false;
         $tokens = $this->getAccessTokens();
@@ -147,7 +154,7 @@ class FlickrApi
      * @param mixed $results Results returned by a Flickr call
      * @return bool Returns true if valid, false otherwise
      */
-    function isValid($results)
+    public function isValid($results)
     {
         if ($results)
             return (isset($results['stat']) && $results['stat'] == 'ok');
@@ -165,7 +172,7 @@ class FlickrApi
      * @param bool $force_anonymous Forces the call to be made anonymously (unsigned)
 	 * @return mixed|bool Will return false if there was an error, data specific to the function otherwise
 	 */	
-	function call($flickr_func, $flickr_args = array(), $force_anonymous = false)
+	public function call($flickr_func, $flickr_args = array(), $force_anonymous = false)
     {
         $tokens = $this->getAccessTokens();
         
@@ -188,6 +195,8 @@ class FlickrApi
                 
             } catch (\Exception $e) {}
             
+            unset($consumer); // No longer needed
+            
             return $result;
         } else {
             // Unsigned call
@@ -207,7 +216,7 @@ class FlickrApi
 	 * @return string A string containing a user-friendly error message or empty if no error
 	 * @see call()
 	 */
-	function errorMessage($results)
+	public function errorMessage($results)
     {
 		if ($results === false)
 			return __('There was a problem contacting Flickr or the request was not authorized. Please try again.', $this->owner->getName());
@@ -248,4 +257,29 @@ class FlickrApi
 		
 		return '';
 	}
+    
+    /**
+     * Obtains license name and URL based on ID
+     * 
+     * @param integer $id ID of License
+     * @return array Array containing name and URL of license, if any.
+     */
+    public function getLicenseById($id)
+    {
+        $result = array('name' => '', 'url' => '');
+        
+        if (empty($this->licenses)) {
+            if ($this->isValid($licenses = $this->call('photos.licenses.getInfo')) && isset($licenses['licenses']['license']))
+            $this->licenses = $licenses['licenses']['license'];
+        }
+        
+        foreach ($this->licenses as $license) {
+            if (isset($license['id']) && $license['id'] == $id) {
+                $result = array_merge($result, $license);
+                break; // Matching license found
+            }
+        }
+        
+        return $result;
+    }    
 }
