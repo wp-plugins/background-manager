@@ -414,17 +414,21 @@ class Main extends \Pf4wp\WordpressPlugin
             $this->np_cache['can_display_background'] = $display_custom_post_types[get_post_type()];
         
         // This isn't a custom post or not specified in settings, so use these
-        if (!isset($this->can_display_background)) {
+        if (!isset($this->np_cache['can_display_background'])) {
+            /* When is_home() is set, it does not report is_page() (even though it is). We use this
+             * to figure out if we're at the greeting page */
+            $is_at_door = (home_url() == wp_guess_url());
+
             $this->np_cache['can_display_background']  = (
-                ($this->options->display_on_front_page  && is_front_page()) ||
+                ($this->options->display_on_front_page  && $is_at_door)     ||
                 ($this->options->display_on_single_post && is_single())     ||
-                ($this->options->display_on_single_page && is_page())       ||
+                ($this->options->display_on_single_page && ((is_page() && !$is_at_door) || (is_home() && !$is_at_door))) ||
                 ($this->options->display_on_archive     && is_archive())    ||
                 ($this->options->display_on_search      && is_search())     ||
                 ($this->options->display_on_error       && is_404())
             );
         }
-
+        
         return $this->np_cache['can_display_background'];
     }
     
@@ -603,6 +607,17 @@ class Main extends \Pf4wp\WordpressPlugin
         return $importers;
     }
     
+    /**
+     * Clears all transients related to Background Manager
+     */
+    protected function clearTransients()
+    {
+        global $wpdb;
+        
+        return $wpdb->get_results("DELETE FROM `{$wpdb->options}` WHERE `option_name` LIKE '_transient%_myatu_bgm_%'");
+
+    }
+    
     /* ----------- Events ----------- */
     
     /**
@@ -703,6 +718,22 @@ class Main extends \Pf4wp\WordpressPlugin
         }
         
         unset($galleries);
+    }
+    
+    /**
+     * Called when the plugin is de-activated
+     */
+    public function onDeactivation()
+    {
+        $this->clearTransients();
+    }
+    
+    /**
+     * Called when the plugin has been upgraded
+     */
+    public function onUpgrade($previous_version, $current_version)
+    {
+        $this->clearTransients();
     }
     
     /**
@@ -1203,6 +1234,9 @@ class Main extends \Pf4wp\WordpressPlugin
         // Generate some debug information
         $plugin_version = $this->getVersion();
         $active_plugins = array();
+        $mem_peak  = (function_exists('memory_get_peak_usage')) ? memory_get_peak_usage() / 1048576 : 0;
+        $mem_usage = (function_exists('memory_get_usage')) ? memory_get_usage() / 1048576 : 0;
+        $mem_max   = (int) @ini_get('memory_limit');
         
         foreach (\Pf4wp\Info\PluginInfo::getInfo(true) as $plugin)
             $active_plugins[] = sprintf("'%s' by %s", $plugin['Name'], $plugin['Author']);
@@ -1211,6 +1245,7 @@ class Main extends \Pf4wp\WordpressPlugin
             'Generated On'                       => gmdate('D, d M Y H:i:s') . ' GMT',
             $this->getDisplayName() . ' Version' => $plugin_version,
             'PHP Version'                        => PHP_VERSION,
+            'Memory Usage'                       => sprintf('%.2f MB Peak, %.2f MB Current, %d MB Max', $mem_peak, $mem_usage, $mem_max),
             'Available PHP Extensions'           => implode(', ', get_loaded_extensions()),
             'Pf4wp Version'                      => PF4WP_VERSION,
             'Pf4wp APC Enabled'                  => (PF4WP_APC) ? 'Yes' : 'No',
@@ -1808,7 +1843,7 @@ class Main extends \Pf4wp\WordpressPlugin
         } else {
             $change_freq = 0; // Disabled
         }
-
+        
         // Spit out variables for JavaScript to use
         wp_localize_script(
             $this->getName() . '-pub', 'background_manager_vars', array(
