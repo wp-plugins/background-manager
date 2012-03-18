@@ -36,7 +36,7 @@ class NextGenGallery extends Importer
     {
         global $wpdb;
         
-        if (!PluginInfo::isInstalled('NextGEN Gallery') || !($gallery_count = (int)$wpdb->get_var("SELECT COUNT(*) FROM `{$wpdb->prefix}ngg_gallery`")))
+        if (!current_user_can('upload_files') || !PluginInfo::isInstalled('NextGEN Gallery') || !($gallery_count = (int)$wpdb->get_var("SELECT COUNT(*) FROM `{$wpdb->prefix}ngg_gallery`")))
             return false;
      
         return true;
@@ -84,8 +84,7 @@ class NextGenGallery extends Importer
             return;
             
         $galleries = new Galleries($main);
-        $images    = new Images($main);
-
+        
         // Collect initial data
         $ngg_gallery   = $wpdb->get_row($wpdb->prepare("SELECT `title`, `path`, `galdesc` FROM `{$wpdb->prefix}ngg_gallery` WHERE `gid` = %d", $_REQUEST['gallery']));
         $ngg_pictures  = $wpdb->get_results($wpdb->prepare("SELECT `filename`, `alttext`, `description` FROM `{$wpdb->prefix}ngg_pictures` WHERE `galleryid` = %d", $_REQUEST['gallery']));
@@ -117,16 +116,7 @@ class NextGenGallery extends Importer
             $image_file = ABSPATH . trailingslashit($ngg_gallery->path) . $ngg_picture->filename;
             
             if (@is_file($image_file)) {
-                // We use media_handle_sideload, which will delete the file after completion, so original is copied first.
-                $temp_file = trailingslashit(sys_get_temp_dir()) . 'bgm' . mt_rand(10000, 99999) . basename($image_file);
-                $copied    = copy($image_file, $temp_file);
-                
-                if ($copied) {
-                    if ($id = media_handle_sideload(array('name' => basename($image_file), 'tmp_name' => $temp_file), $gallery_id, $ngg_picture->alttext, array('post_content' => $ngg_picture->description)))
-                        update_post_meta($id, '_wp_attachment_image_alt', $ngg_picture->alttext);
-                }
-                
-                if (!$copied || !$id)
+                if (!Images::importImage($image_file, $gallery_id, $ngg_picture->alttext, $ngg_picture->description, $ngg_picture->alttext))
                     $main->addDelayedNotice(sprintf(__('Unable to import image <em>%s</em> into Image Set <strong>%s</strong>', $main->getName()), $image_file, $image_set), true);
             }
            
@@ -137,6 +127,5 @@ class NextGenGallery extends Importer
         $main->addDelayedNotice(__('Completed import from NextGEN Gallery', $main->getName()));
         
         unset($galleries);
-        unset($images);
     }
 }

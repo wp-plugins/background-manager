@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -32,8 +32,9 @@ use Pf4wp\Template\TwigEngine;
  * WordPress: 3.1.0
  *
  * @author Mike Green <myatus@gmail.com>
- * @version 0.9.5
+ * @version 1.0.4
  * @package Pf4wp
+ * @api
  */
 class WordpressPlugin
 {
@@ -42,12 +43,39 @@ class WordpressPlugin
     const VIEWS_DIR        = 'resources/views/';
     const VIEWS_CACHE_DIR  = 'store/cache/views/';
     
-    private static $instances = array();            // Instance container
-    private $registered = false;                    // Whether the plugin has been registered with WordPress
-    private $plugin_file = '';                      // Main (master) filename of the plugin, as loaded by WordPress
-    private $name = '';                             // Working name of the plugin (used for options, slugs, etc.)
-    private $menu = false;                          // The menu attached to the plugin, if any
-    private $internal_options;                      // An object handling the internal options for the plugin
+    /** Instance container
+     * @internal
+     */
+    private static $instances = array();
+    
+    /** Whether the plugin has been registered with WordPress
+     * @internal
+     */
+    private $registered = false;
+    
+    /** Main (master) filename of the plugin, as loaded by WordPress
+     * @internal
+     */
+    private $plugin_file = '';
+    
+    /** Working name of the plugin (used for options, slugs, etc.)
+     * @internal
+     */
+    private $name = '';
+    
+    /** The menu attached to the plugin, if any
+     * @internal
+     */
+    private $menu = false;
+    
+    /** An object handling the internal options for the plugin
+     * @internal
+     */
+    private $internal_options;
+    
+    /** Array containing the default internal options
+     * @internal
+     */
     private $default_internal_options = array(
         'version' => '0.0',             // The version of the plugin, to track upgrade events
         'delayed_notices' => array(),   // Array containing notices that aren't displayed until possible to show them 
@@ -55,21 +83,28 @@ class WordpressPlugin
     
     /**
      * The template engine object (EngineInterface)
+     * @see Template\EngineInterface
+     * @api
      */
     public $template;
     
     /**
      * The options object for the plugin (Options)
+     * @see Options\Options
+     * @see Options\WordpressOptions
+     * @api
      */
     public $options;
     
     /**
      * If the public-side AJAX is enabled, this variable is set to `true`
+     * @api
      */
     public $public_ajax = false;
     
     /**
      * The default options for the plugin, if any
+     * @api
      */
     protected $default_options = array();
         
@@ -91,16 +126,7 @@ class WordpressPlugin
         // Options handlers
         $this->options = new WordpressOptions($this->name, $this->default_options);
         $this->internal_options = new WordpressOptions('_' . $this->name, $this->default_internal_options); // Internal            
-            
-        // Load locales
-        $locale = get_locale();
-        if ( !empty($locale) ) {
-            $mofile = $this->getPluginDir() . static::LOCALIZATION_DIR . $locale . '.mo';
-            
-            if ( @is_file($mofile) && @is_readable($mofile) ) 
-                load_textdomain($this->name, $mofile);
-        }
-
+        
         // pre-Initialize the template engine to a `null` engine
         $this->template = new NullEngine();        
         
@@ -178,11 +204,12 @@ class WordpressPlugin
      * ));
      * $_pf4wp_ucl->register();
      * 
-     * My\Plugin::register(__FILE__); // <-- Register plugin with WordPress here
+     * call_user_func('My\\Plugin::register', __FILE__); // <-- Register plugin with WordPress here
      * </code>
      *
      * @param string $plugin_file The filename of the plugin's main file
      * @throws \Exception if no plugin filename was specified
+     * @api
      */
     public static function register($plugin_file)
     {
@@ -203,11 +230,21 @@ class WordpressPlugin
      * it's actually written to. Do not circumvent Zend's optimizations!
      *
      * @see construct()
+     * @api
      */
     public function registerActions()
     {
         if ($this->registered || empty($this->plugin_file))
             return;
+            
+        // Load locales
+        $locale = get_locale();
+        if ( !empty($locale) ) {
+            $mofile = $this->getPluginDir() . static::LOCALIZATION_DIR . $locale . '.mo';
+            
+            if ( @is_file($mofile) && @is_readable($mofile) ) 
+                load_textdomain($this->name, $mofile);
+        }            
         
         // Plugin events (also in Multisite)
         add_action('after_plugin_row_' . plugin_basename($this->plugin_file), array($this, '_onAfterPluginText'), 10, 0);
@@ -252,6 +289,9 @@ class WordpressPlugin
         add_action('wp_ajax_' . $this->name, array($this, '_onAjaxCall'), 10, 0);       
         if ($this->public_ajax)
             add_action('wp_ajax_nopriv_' . $this->name, array($this, '_onAjaxCall'), 10, 0);
+            
+        // Register a final action when WP has been loaded
+        add_action('wp_loaded', array($this, '_onWpLoaded'), 10, 0);        
         
         // Done!
         $this->registered = true;
@@ -261,6 +301,7 @@ class WordpressPlugin
      * Returns the plugin working name (used to access low-level functions)
      *
      * @return string Plugin working name
+     * @api
      */
     public function getName()
     {
@@ -271,6 +312,7 @@ class WordpressPlugin
      * Returns the plugin directory
      *
      * @return string Plugin directory (always with trailing slash)
+     * @api
      */
     public function getPluginDir()
     {		
@@ -281,6 +323,7 @@ class WordpressPlugin
      * Returns the plugin Base Name (as used by many WordPress functions/methods
      *
      * @return string Plugin base name
+     * @api
      */
     public function getPluginBaseName()
     {
@@ -292,6 +335,7 @@ class WordpressPlugin
      *
      * @param bool $full If set to true, the full URL (including filename) is returned.
      * @return string Plugin URL
+     * @api
      */
     public function getPluginUrl($full = false)
     {		
@@ -307,6 +351,7 @@ class WordpressPlugin
      *
      * @param string $type Type of resource directory to retrieve (ie: 'css', 'js', 'views'), 'js' by default
      * @return array Array containing Base URL, Version and Debug string.
+     * @api
      */
     public function getResourceUrl($type = 'js')
     {
@@ -322,6 +367,7 @@ class WordpressPlugin
      * Get the URL of the main menu entry
      *
      * @return string|bool URL, or `false` if invalid.
+     * @api
      */
     public function getParentMenuUrl()
     {
@@ -335,6 +381,7 @@ class WordpressPlugin
      * Returns the display name for the plugin
      *
      * @return string Display name
+     * @api
      */
     public function getDisplayName()
     {
@@ -342,9 +389,21 @@ class WordpressPlugin
     }
     
     /**
+     * Returns the version for the plugin
+     *
+     * @return string Version
+     * @api
+     */
+    public function getVersion()
+    {
+        return PluginInfo::getInfo(false, plugin_basename($this->plugin_file), 'Version');
+    }
+    
+    /**
      * Retrieves the menu attached to this plugin
      *
      * @return StandardMenu|bool The menu or `false` if invalid
+     * @api
      */
     public function getMenu()
     {
@@ -368,6 +427,7 @@ class WordpressPlugin
      * @param bool $is_error Optional parameter that if set to `true` will create an 
      *		AJAX error response (uses $data as the error string)
      * @return die()
+     * @api
      */
     public function ajaxResponse($data, $is_error = false) {
         $out = array();
@@ -393,6 +453,7 @@ class WordpressPlugin
      *
      * @todo: find a suitable hook?
      * @param string Classname of class to register
+     * @api
      */
     public function registerWidget($class)
     {
@@ -410,21 +471,44 @@ class WordpressPlugin
     
     /**
      * Clears (purges) any plugin-wide managed caches
+     *
+     * @param bool $delete If set to `true`, the cache is deleted instead of only cleared
+     * @return bool Returns `true` if the operation was successful, `false` otherwise
+     * @api
      */
-    public function clearCache()
+    public function clearCache($delete = false)
     {
-        StoragePath::delete($this->getPluginDir() . static::VIEWS_CACHE_DIR);
+        $cache_dir = $this->getPluginDir() . static::VIEWS_CACHE_DIR;
+        $result    = (StoragePath::delete($cache_dir) !== false);
+        
+        if ($result && !$delete)
+            $result = (StoragePath::validate($cache_dir) !== false);
+            
+        return $result;
+    }
+    
+    /**
+     * Deletes any plugin-wide managed caches
+     *
+     * Short-hand for clearCache(true)
+     *
+     * @return bool Returns `true` if the operation was successful, `false` otherwise
+     * @api
+     */
+    public function deleteCache()
+    {
+        return $this->clearCache(true);
     }
     
     /**
      * Adds a delayed notice to the queue
      *
-     * This is particularly useful for displaying notices after an onActivate() or
-     * onUpgrade() event, as these are triggered inside a sandbox thus preventing 
-     * anything from being displayed.
+     * This is particularly useful for displaying notices after an onActivate() event, 
+     * as this is triggered inside a sandbox thus preventing anything from being displayed.
      *
      * @param string $message Message to display to the end user
      * @param bool $is_error Optional parameter to indicate the message is an error message
+     * @api
      */
     public function addDelayedNotice($message, $is_error = false)
     {
@@ -440,6 +524,8 @@ class WordpressPlugin
     
     /**
      * Clears the delayed notice queue
+     *
+     * @api
      */
     public function clearDelayedNotices()
     {
@@ -460,6 +546,7 @@ class WordpressPlugin
      * - `nonce`         : The NONCE to send, used to verify the AJAX request by the plugin
      * - `nonceresponse` : The NONCE sent back as a result of the AJAX request should match this to be valid
      *
+     * @internal
      */
     private function insertAjaxVars()
     {
@@ -482,6 +569,7 @@ class WordpressPlugin
      * 
      * @see _onAdminRegister()
      * @param string Hook provided by WordPress for the menu item
+     * @internal
      */    
     private function attachAdminLoadHooks($hook)
     {
@@ -496,8 +584,9 @@ class WordpressPlugin
     /**
      * Iterates blogs, performing an action after each switch (multisite)
      *
-     * @param object $action Action to perform
+     * @param mixed $action Action to perform
      * @param mixed $args Array containing parameters to pass to the action
+     * @internal
      */
     private function iterateBlogsAction($action, array $args = array())
     {
@@ -537,21 +626,10 @@ class WordpressPlugin
      * Performs common _onActivation() actions
      *
      * @see _onActivation(), onActivation()
+     * @internal
      */
     public function _doOnActivation()
     {
-        // Clear the plugin-wide managed cache
-        $this->clearCache();
-        
-        // Check for upgrade
-        $current_version = PluginInfo::getInfo(false, plugin_basename($this->plugin_file), 'Version');
-       
-        if (!empty($current_version) && ($previous_version = $this->internal_options->version) != $current_version) {
-            $this->internal_options->version = $current_version;
-            
-            $this->onUpgrade($previous_version, $current_version);
-        }
-        
         // Call user-defined event
         $this->onActivation();
     }
@@ -560,6 +638,7 @@ class WordpressPlugin
      * Performs common _onDeactivation() actions
      *
      * @see _onDeactivation(), onDeactivation()
+     * @internal
      */
     public function _doOnDeactivation()
     {
@@ -574,12 +653,10 @@ class WordpressPlugin
      * Performs common _onUninstall() actions
      *
      * @see _onUninstal(), onUninstall()
+     * @internal
      */
     public function _doOnUninstall()
     {
-        // Clear the plugin-wide managed cache
-        $this->clearCache();
-
         // Delete our options from the WP database
         $this->options->delete();
         $this->internal_options->delete();
@@ -599,6 +676,7 @@ class WordpressPlugin
      * 
      * @see _doOnActivation()
      * @param int $blog_id The new blog ID (provided by WP Action)
+     * @internal
      */
     final public function _onNewBlog($blog_id)
     {
@@ -619,9 +697,13 @@ class WordpressPlugin
      * Event called when the plugin is activated
      *
      * @see onActivation(), _doOnActivation()
+     * @internal
      */
     final public function _onActivation()
     {
+        // Clear the plugin-wide managed cache
+        $this->clearCache();
+        
         $this->iterateBlogsAction(array($this, '_doOnActivation'));
     }
     
@@ -629,6 +711,7 @@ class WordpressPlugin
      * Event called when the plugin is deactivated
      *
      * @see onDeactivation(), _doOnDeactivation()
+     * @internal
      */
     final public function _onDeactivation()
     {
@@ -641,12 +724,39 @@ class WordpressPlugin
      * Note: Remember to use the full namespace when calling this function!
      *
      * @see onUninstall(), _doOnUninstall()
+     * @internal
      */
     final public static function _onUninstall()
     {
         $this_instance = self::instance('', false);
         
+        // Delete the plugin-wide managed cache
+        $this_instance->deleteCache();
+        
         $this_instance->iterateBlogsAction(array($this_instance, '_doOnUninstall'));
+    }
+    
+    /**
+     * Event called when the WordPress is fully loaded
+     *
+     * @see onWpLoaded(), onUpgrade()
+     * @internal
+     */
+    final public function _onWpLoaded()
+    {
+        // Check for upgrade
+        $current_version = $this->getVersion();
+       
+        if (!empty($current_version) && ($previous_version = $this->internal_options->version) != $current_version) {
+            // Clear (purge) the plugin-wide managed cache
+            $this->clearCache();
+            
+            $this->internal_options->version = $current_version;
+            
+            $this->iterateBlogsAction(array($this, 'onUpgrade'), array($previous_version, $current_version));
+        }
+        
+        $this->onWpLoaded();
     }
      
     /**
@@ -656,6 +766,7 @@ class WordpressPlugin
      * returned by onBuildMenu(), if any.
      *
      * @see onAdminInit(), onBuildMenu()
+     * @internal
      */
     final public function _onAdminRegister()
     {
@@ -689,6 +800,7 @@ class WordpressPlugin
      * Displays a short message underneith the plugin description
      *
      * @see onAfterPluginText()
+     * @internal
      */
     final public function _onAfterPluginText()
     {
@@ -708,6 +820,7 @@ class WordpressPlugin
      * Adds a 'Settings' link to the plugin actions as an added convenience
      *
      * @param mixed Array containing existing plugin actions
+     * @internal
      */
     final public function _onPluginActionLinks($actions)
     {
@@ -734,6 +847,7 @@ class WordpressPlugin
      * Admin loader event called when the selected page is about to be rendered - Stage 2
      *
      * @see onAdminLoad()
+     * @internal
      */
     final public function _onAdminLoad()
     {
@@ -752,6 +866,7 @@ class WordpressPlugin
      * This provices AJAX nonce for calls and replies for improved security
      *
      * @see onAdminScripts()
+     * @internal
      */
     final public function _onAdminScripts()
     {
@@ -765,6 +880,8 @@ class WordpressPlugin
     
     /**
      * Event called to display Dashboard notices in the notification queue
+     *
+     * @internal
      */
     final public function _onAdminNotices()
     {
@@ -787,6 +904,7 @@ class WordpressPlugin
      * Process an AJAX call
      *
      * @see onAjaxRequest(), ajaxResponse()
+     * @internal
      */
     final public function _onAjaxCall()
     {
@@ -808,6 +926,7 @@ class WordpressPlugin
      * Registers public events
      *
      * @see onPublicScripts(), onPublicStyles(), onPublicLoad()
+     * @internal
      */
     final public function _onPublicInit()
     {
@@ -825,6 +944,7 @@ class WordpressPlugin
      * Event called public scripts
      *
      * @see onPublicScripts()
+     * @internal
      */
     final public function _onPublicScripts()
     {
@@ -839,6 +959,7 @@ class WordpressPlugin
      *
      * @param \Exception $exception Exception object
      * @param int $count Count of Exception object
+     * @internal
      */
     final public function _onStage2Exception($exception, $count = 1)
     {
@@ -893,36 +1014,65 @@ class WordpressPlugin
     
     /**
      * Event called when the plugin is activated
+     *
+     * Note: This event is called for each blog on a Multi-Site installation
+     *
+     * @api
      */
     public function onActivation() {}
     
     /**
      * Event called when the plugin is deactivated
+     *
+     * Note: This event is called for each blog on a Multi-Site installation
+     *
+     * @api
      */
     public function onDeactivation() {}
     
     /**
      * Event called when the plugin is uninstalled
+     *
+     * Note: This event is called for each blog on a Multi-Site installation
+     *
+     * @api
      */
     public function onUninstall() {}
     
     /**
      * Event called when the plugin is upgraded
      *
+     * Note: This event is called for each blog on a Multi-Site installation
+     *
      * If the previous version is 0.0, then this is a new installation.
      *
      * @param string $previous_version Previous version
      * @param string $current_version Current version
+     * @api
      */
     public function onUpgrade($previous_version, $current_version) {}
     
     /**
+     * Event called when WordPress is fully loaded
+     *
+     * Note: This event is called on both the public (front-end) and admin (back-end) sides. Use 
+     * `is_admin()` if neccesary.
+     *
+     * @api
+     */
+    public function onWpLoaded() {}
+    
+    /**
      * Event called when Dashboard Widgets are to be registered
+     *
+     * @api
      */
     public function onDashboardWidgetRegister() {}
     
     /**
      * Event called when Sidebard (Theme) Widgets are to be registered
+     *
+     * @api
      */
     public function onWidgetRegister() {}    
      
@@ -930,6 +1080,8 @@ class WordpressPlugin
      * Event called to build a custom menu
      * 
      * @return MenuEntry|string|bool Returns a MenuEntry, a string for a hook, or `false` if invalid
+     *
+     * @api
      */
     public function onBuildMenu()
     {
@@ -940,6 +1092,7 @@ class WordpressPlugin
      * Event called to retrieve the text to display after the plugin description, if any
      *
      * @return string String to display
+     * @api
      */
     public function onAfterPluginText()
     {
@@ -952,6 +1105,7 @@ class WordpressPlugin
      * This is a plugin-wide event. For page (screen) specific events, use onAdminLoad()
      *
      * @see onAdminLoad()
+     * @api
      */
     public function onAdminInit() {}
     
@@ -960,16 +1114,21 @@ class WordpressPlugin
      *
      * @param object|null The current screen being displayed
      * @see _onAdminLoad()
+     * @api
      */
     public function onAdminLoad($current_screen) {}
     
     /**
      * Event called when the plugin is ready to load scripts for the admin/Dashboard
+     *
+     * @api
      */
     public function onAdminScripts() {}
     
     /**
      * Event called when the plugin is ready to load stylesheets for the admin/Dashboard
+     *
+     * @api
      */
     public function onAdminStyles() {}
     
@@ -996,7 +1155,7 @@ class WordpressPlugin
      *         async    : false,
      *         data     : { action: my_plugin_name_ajax.action, func: ajaxFunc, data: ajaxData, _ajax_nonce: my_plugin_name_ajax.nonce },
      *         success  : function(ajaxResp) {
-     *             if (ajaxResp.nonce == my_plugin_name_ajax.nonceresponse && ajaxResp.stat == 'ok')
+     *             if (ajaxResp.nonce == my_plugin_name_ajax.nonceresponse &amp;&amp; ajaxResp.stat == 'ok')
      *                 resp = ajaxResp.data;
      *         }
      *     });
@@ -1019,28 +1178,36 @@ class WordpressPlugin
      * @param string $action Action to take according to AJAX caller
      * @param mixed $data Data sent by the AJAX caller (WARNING: Data is unsanitzed)
      * @see ajaxResponse()
+     * @api
      */
     public function onAjaxRequest($action, $data) {}
 
     /**
      * Event triggered when a public facing side of the plugin is ready for initialization
+     *
+     * @api
      */
     public function onPublicInit() {}
     
     /**
      * Event triggered when queueing scripts on the public facing side
+     *
+     * @api
      */
     public function onPublicScripts() {}
     
     /**
      * Event triggered when queueing stylesheets on the public facing side
+     *
+     * @api
      */
     public function onPublicStyles() {}
     
     /**
      * Event triggered when the footer is about to be displayed on the public facing side
+     *
+     * @api
      */
     public function onPublicFooter() {}    
 }
 
- 
