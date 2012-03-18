@@ -87,6 +87,9 @@ with PHP versions older than 5.3.
 
 == Changelog ==
 
+= 1.0.25 (March 18, 2012) =
+* Fixed: Resolved the "flickering" before each transition
+
 = 1.0.24 (March 4, 2012) =
 * Changed: Image ratios are now retained, regardless of their width
 * Fixed: When a static page for the front page using "Posts as page" was set, it would not display the background on either that page nor the front page.
