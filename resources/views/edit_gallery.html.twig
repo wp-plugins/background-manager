@@ -16,11 +16,14 @@
     {{ nonce_meta_order | raw }}
     {{ nonce_meta_clsd | raw }}
 
-    <div id="poststuff" class="metabox-holder {{ has_right_sidebar }}">
+    <div id="poststuff" {% if not is_wp34 %}class="metabox-holder {{ has_right_sidebar }}"{% endif %}>
+        {% if not is_wp34 %}
         <div id="side-info-column" class="inner-sidebar">
             {{ meta_boxes_side | raw }}
         </div>
-        <div id="post-body">
+        {% endif %}
+
+        <div id="post-body" {% if is_wp34 %}class="metabox-holder {{ has_right_sidebar }}"{% endif %}>
             <div id="post-body-content">
                 <div id="titlediv">
                     <div id="titlewrap">
@@ -43,9 +46,15 @@
                     </div>
                     <div id="image_editor_container" class="wp-editor-container">
                         <div id="quicktags" class="quicktags-toolbar">
-                            <div id="ed_toolbar">
-                                <input id="ed_delete_selected" class="ed_button" type="button" value="{{ __('Delete Selected') }}" onclick="return false;" title="{{ __('Delete the selected images') }}" accesskey="l" />
-                                <input id="ed_clear_selected" class="ed_button" type="button" value="{{ __('Clear') }}" onclick="return false;" title="{{ __('Clear selected images') }}" accesskey="c" />
+                            <div id="ed_toolbar" class="img_ed_buttons">
+                                {{ __('Image Selection: ') }}
+                                <a id="ed_move_l_selected" href="#" class="button" accesskey="[" title="{{ __('Move the selected images to the left') }}"><i></i>{{ __('Move Left') }}</a>
+                                <a id="ed_move_r_selected" href="#" class="button" accesskey="]" title="{{ __('Move the selected images to the right') }}">{{ __('Move Right') }} <i></i></a>
+                                &nbsp;
+                                <a id="ed_delete_selected" href="#" class="button" accesskey="l" title="{{ __('Permanently delete the selected images') }}"><i></i> {{ __('Delete') }}</a>
+                                <a id="ed_remove_selected" href="#" class="button" accesskey="v" title="{{ __('Remove (detach) the images from the Image Set') }}"><i></i> {{ __('Remove') }}</a>
+                                &nbsp;
+                                <a id="ed_clear_selected" href="#" class="button" accesskey="c" title="{{ __('Clear the selection') }}">{{ __('Clear') }}</a>
                             </div>
                         </div>
                         <div id="editorcontainer">
@@ -71,11 +80,18 @@
                     </table>
                 </div>
 
+                {% if not is_wp34 %}
                 {{ meta_boxes_main | raw }}
-            </div>
-        </div>
+                {% endif %}
+            </div> {# /post-body-content #}
+
+            {% if is_wp34 %}
+            <div id="postbox-container-1" class="postbox-container">{{ meta_boxes_side | raw }}</div>
+            <div id="postbox-container-2" class="postbox-container">{{ meta_boxes_main | raw }}</div>
+            {% endif %}
+        </div> {# /post-body #}
         <br class="clear" />
-    </div>
+    </div> {# /post-stuff #}
 </form>
 
 <script type="text/javascript">

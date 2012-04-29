@@ -19,10 +19,13 @@ use Pf4wp\Meta\PostMetabox;
  * @subpackage Meta
  * @since 1.0.14
  */
-abstract class Taxonomy extends PostMetabox
+abstract class Taxonomy extends PostMetabox implements \Pf4wp\Dynamic\DynamicInterface
 {
     protected $meta_tax         = '';       // The name of the Meta under which taxonomy overrides are stored
     protected $taxonomy         = '';       // The taxonomy being handled
+    
+    const MT_OVERLAY = '_ol';
+    const MT_COLOR   = '_bgc';
     
     /** 
      * Constructor 
@@ -31,11 +34,34 @@ abstract class Taxonomy extends PostMetabox
      */
     public function __construct($owner, $auto_register = true)
     {
-        add_filter('myatu_bgm_active_gallery', array($this, 'onActiveGallery'), 20, 1);
-        add_filter('myatu_bgm_active_overlay', array($this, 'onActiveOverlay'), 20, 1);
+        add_filter('myatu_bgm_active_gallery',   array($this, 'onActiveGallery'), 20, 1);
+        add_filter('myatu_bgm_active_overlay',   array($this, 'onActiveOverlay'), 20, 1);
+        add_filter('myatu_bgm_background_color', array($this, 'onBackgroundColor'), 20, 1);
         
         parent::__construct($owner, $auto_register);
     }
+    
+    /**
+     * Return whether the dynamic class is active
+     *
+     * @return bool
+     */
+    public static function isActive()
+    {
+        return false;
+    }
+    
+    /**
+     * Info for dynamic loading
+     */
+    public static function info()
+    {
+        return array(
+            'name'   => '', // Not used
+            'desc'   => '', // Not used
+            'active' => static::isActive(),
+        );
+    }        
     
     /**
      * Renders the Metabox Contents
@@ -46,7 +72,11 @@ abstract class Taxonomy extends PostMetabox
      */
     protected function doRender($id, $template, $vars)
     {
-        $selected_overlay = get_post_meta($id, $this->meta_tax . '_ol', true);
+        wp_enqueue_script('farbtastic');
+        wp_enqueue_style('farbtastic');
+        
+        $selected_overlay = get_post_meta($id, $this->meta_tax . static::MT_OVERLAY, true);
+        $background_color = get_post_meta($id, $this->meta_tax . static::MT_COLOR, true);
         
         // List of overlays
         $overlays = array_merge(array(
@@ -62,7 +92,7 @@ abstract class Taxonomy extends PostMetabox
             )
         ), $this->owner->getSettingOverlays($selected_overlay)); 
 
-        $vars = array_merge($vars, array('overlays' => $overlays));
+        $vars = array_merge($vars, array('overlays' => $overlays, 'background_color' => $background_color));
         
         $this->owner->template->display($template, $vars);    
     }
@@ -73,11 +103,17 @@ abstract class Taxonomy extends PostMetabox
      * @param int $id ID of the gallery being saved
      * @param mixed $tax The taxonomies selected
      * @param string|int $overlay The overlay selected
+     * @param string $background_color The background color to use
      */
-    public function doSave($id, $tax, $overlay)
+    public function doSave($id, $tax, $overlay, $background_color = '')
     {
+        // Sanity check for color
+        if (!preg_match('/^([a-fA-F0-9]){3}(([a-fA-F0-9]){3})?$/', $background_color))
+            $background_color = '';
+        
         $this->setSinglePostMeta($id, $this->meta_tax, $tax);
-        $this->setSinglePostMeta($id, $this->meta_tax . '_ol', $overlay);
+        $this->setSinglePostMeta($id, $this->meta_tax . static::MT_OVERLAY, $overlay);
+        $this->setSinglePostMeta($id, $this->meta_tax . static::MT_COLOR,   $background_color);
     }
     
     /**
@@ -117,8 +153,9 @@ abstract class Taxonomy extends PostMetabox
                 // Match found
                 if ($match) {
                     $cached_val = array(
-                        'gallery_id' => $gallery->ID,
-                        'overlay_id' => get_post_meta($gallery->ID, $this->meta_tax . '_ol', true),
+                        'gallery_id'       => $gallery->ID,
+                        'overlay_id'       => get_post_meta($gallery->ID, $this->meta_tax . static::MT_OVERLAY, true),
+                        'background_color' => get_post_meta($gallery->ID, $this->meta_tax . static::MT_COLOR,   true),
                     );
                     
                     // Cache response before returning - WP claims it will serialize, but doesn't seem to work well for this
@@ -185,5 +222,18 @@ abstract class Taxonomy extends PostMetabox
         }
         
         return $overlay_id; // Default
-    }    
+    }
+    
+    /**
+     * Event called on myatu_bgm_background color filter
+     */
+    public function onBackgroundColor($color)
+    {
+        $m_color = $this->getOverrideId('background_color');
+        
+        if (!empty($m_color))
+            return $m_color;
+            
+        return $color; // Default
+    }
 }

@@ -1,16 +1,29 @@
-/*
- * Copyright (c) 2011 Mike Green <myatus@gmail.com>
+/*!
+ * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  *
  */
+if (myatu_bgm === undefined)
+    var myatu_bgm = {};
 
 (function($){
     $.extend(myatu_bgm, {
+        /** Gets the count of named properties */
+        GetObjSize: function(obj) {
+            var size = 0, key;
+
+            for (key in obj)
+                if (obj.hasOwnProperty(key))
+                    size++;
+
+            return size;
+        },
+
         /** Holds selected images */
         image_selection: new Object(),
-       
+
         /** Gets the image count [Ajax] */
         getImageCount: function() { return (myatu_bgm.GetAjaxData('image_count', $('#edit_id').val())); },
 
@@ -23,23 +36,72 @@
         /** Removes the image iframe overlay and restores iframe visibility */
         removeImagesOverlay: function() { $('#images_iframe').fadeIn('fast', function() { $('#image_iframe_overlay').hide(); }); },
 
+        /** Helper to remove or delete images */
+        doDeleteRemoveImages : function(do_delete, id) {
+            var key, ids = '', func = (do_delete === undefined || !do_delete) ? 'remove_images' : 'delete_images';
+
+            if (id === undefined) {
+                // Determine the selected images
+                for (key in myatu_bgm.image_selection)
+                    ids += key.replace('image_', '') + ',';
+            } else {
+                // Delete or remove specified image
+                ids = id;
+            }
+
+            // Delete or remove the images
+            myatu_bgm.GetAjaxData(func, ids);
+
+            myatu_bgm.showHideEditBar(true);
+
+            if (myatu_bgm.haveImagesChanged(true))
+                myatu_bgm.loadImagesIframe();
+        },
+
+        /** Helper to move images */
+        doMoveImages: function(right, id) {
+            var key, ids = '', inc = (right) ? 1 : 0;
+
+            if (id === undefined) {
+                // Determine the selected images
+                for (key in myatu_bgm.image_selection)
+                    ids += key.replace('image_', '') + ',';
+            } else {
+                // Move a specified image
+                ids = id;
+            }
+
+            // Peform AJAX magic for moving the image
+            myatu_bgm.GetAjaxData('change_order', {'ids' : ids, 'inc' : inc });
+
+            myatu_bgm.showHideEditBar(true);
+
+            if (myatu_bgm.haveImagesChanged(true))
+                myatu_bgm.loadImagesIframe();
+        },
+
         /** Displays or hides the "Edit Bar" (containing buttons related to selected items) */
         showHideEditBar: function(getIds) {
+            var edit_bar = $('#quicktags'),
+                selected_count = $('#selected-count'),
+                count, ids, id, key;
+
             if (getIds == true) {
                 // Check if a selected ID no longer exist in getImageIds(), and delete from image_selection if so.
-                var ids = myatu_bgm.getImageIds();
+                ids = myatu_bgm.getImageIds();
 
                 for (key in myatu_bgm.image_selection) {
-                    var id = key.replace('image_', '');
+                    id = key.replace('image_', '');
 
                     if (ids[id] == undefined)
                         delete myatu_bgm.image_selection[key];
                 }
             }
 
-            // Show or hide the edit bar based on the image_selection object count
-            var edit_bar = $('#quicktags'), selected_count = $('#selected-count'), count = myatu_bgm.GetObjSize(myatu_bgm.image_selection);
+            // Obtain the count of selected images (after removal)
+            count = myatu_bgm.GetObjSize(myatu_bgm.image_selection);
 
+            // Show or hide the edit bar based on the image_selection object count
             if (count > 0) {
                 edit_bar.slideDown();
                 selected_count.show();
@@ -71,7 +133,7 @@
 
             if (dest == undefined)
                 dest = $('#images_iframe').attr("src"); // Default action is to reload
-               
+
             // Display the overlay on top of the images iframe
             overlay.show();
 
@@ -81,40 +143,64 @@
             // Center the loader image
             loader.css('top', ((overlay.height() - loader.outerHeight()) / 2) + overlay.scrollTop() + 'px');
             loader.css('left', ((overlay.width() - loader.outerWidth()) / 2) + overlay.scrollLeft() + 'px');
-            
+
             // Fade out the iframe
             $('#images_iframe').attr("src", dest).fadeOut('fast');
         },
 
-        /** Shows (or hides) the (single image) edit/delete buttons on the highlighted item */
+        /** Shows (or hides) the (single image) buttons on the highlighted item */
         showHideImageButtons: function(highlighted) {
-            var image_buttons = $('#images_iframe').contents().find('#image_buttons');
+            var image_buttons    = $('#images_iframe').contents().find('#image_buttons'),
+                image_r_button_h = $('#images_iframe').contents().find('#image_move_right_button_holder'),
+                image_l_button_h = $('#images_iframe').contents().find('#image_move_left_button_holder'),
+                image_img_bottom, image_img, overlay;
 
-            if (highlighted == undefined)
-                highlighted = $('#images_iframe').contents().find('.highlighted:first');
-
-            // If nothing is highlighted, then we hide the edit buttons instead.
+            // If nothing is highlighted, then we hide the buttons instead.
             if (!$(highlighted).length) {
                 image_buttons.hide();
+                image_r_button_h.hide();
+                image_l_button_h.hide();
                 return;
             }
 
-            var image_img = $('img', highlighted), overlay = $('#image_iframe_overlay'), loader = $('#loader', overlay);
+            image_img = $('img', highlighted);
+            overlay   = $('#image_iframe_overlay');
 
-            // Align edit buttons within the top-left corner of the image tag
-            image_buttons.css('top', image_img.offset().top - overlay.scrollTop() + 'px');
-            image_buttons.css('left', image_img.offset().left - overlay.scrollLeft() +  'px');
+            // Align edit buttons within the top-left corner of the image
+            image_buttons.css('top',  image_img.offset().top  - overlay.scrollTop()  + 'px');
+            image_buttons.css('left', image_img.offset().left - overlay.scrollLeft() + 'px');
             image_buttons.show();
 
-            // Set the correct href for the image `edit` and `delete` button
+            image_img_bottom = (image_img.height() + image_img.offset().top - 30) - overlay.scrollTop();
+            // Align the 'move left' button with the bottom-left corner of the image
+            image_l_button_h.css('top',  image_img_bottom + 'px');
+            image_l_button_h.css('left', image_img.offset().left - overlay.scrollLeft() + 'px');
+            image_l_button_h.show();
+
+            // Align the 'move right' button with the bottom-right corner of the image
+            image_r_button_h.css('top',  image_img_bottom + 'px');
+            image_r_button_h.css('left', (image_img.width() + image_img.offset().left - 30) - overlay.scrollLeft() + 'px');
+            image_r_button_h.show();
+
+            // Set the correct href for the buttons
             $('#image_edit_button', image_buttons).attr("href", $('#image_iframe_edit_base').val() + '&id=' + $(highlighted).attr('id').replace('image_', '') + '&TB_iframe=true');
             $('#image_del_button', image_buttons).attr("href", '#' + $(highlighted).attr('id').replace('image_', ''));
+            $('#image_remove_button', image_buttons).attr("href", '#' + $(highlighted).attr('id').replace('image_', ''));
+            // Move buttons
+            $('#image_move_left_button', image_l_button_h).attr("href", '#' + $(highlighted).attr('id').replace('image_', ''));
+            $('#image_move_right_button', image_r_button_h).attr("href", '#' + $(highlighted).attr('id').replace('image_', ''));
         },
 
         /** Event triggered when the iframe has finished loading */
         onImagesIframeFinish: function(current_page) {
-            var image_body = $('#images_iframe').contents().find('html,body'), image_container = $('#image_container', image_body);
-            var pagination_links = myatu_bgm.GetAjaxData('paginate_links', { id: $('#edit_id').val(), base: $('#images_iframe_base').val(), pp: $('#images_per_page').val(), current: current_page });
+            var image_body       = $('#images_iframe').contents().find('html,body'),
+                image_container  = $('#image_container', image_body),
+                pagination_links = myatu_bgm.GetAjaxData('paginate_links', {
+                    id:      $('#edit_id').val(),
+                    base:    $('#images_iframe_base').val(),
+                    pp:      $('#images_per_page').val(),
+                    current: current_page
+                });
 
             // Display pagination links, if any were returned by Ajax call
             if (pagination_links != false) {
@@ -124,7 +210,7 @@
 
             // Display image count
             $('#wp-word-count #image-count').html(myatu_bgm.getImageCount());
-            
+
             // Iterate the images displayed, binding click and re-highlighting if previously selected
             $('.image', image_container).each(function(index) {
                 $(this).dblclick(myatu_bgm.onImageDoubleClick);
@@ -138,6 +224,9 @@
             image_body.click(myatu_bgm.onEmptyImageAreaClick);
             $('#image_edit_button', image_body).click(myatu_bgm.onImageEditButtonClick);
             $('#image_del_button', image_body).click(myatu_bgm.onImageDeleteButtonClick);
+            $('#image_remove_button', image_body).click(myatu_bgm.onImageRemoveButtonClick);
+            $('#image_move_right_button', image_body).click(myatu_bgm.onImageMoveRightButtonClick);
+            $('#image_move_left_button', image_body).click(myatu_bgm.onImageMoveLeftButtonClick);
 
             // Attach keyboard events
             image_body.keydown(myatu_bgm.onIframeKeyDown);
@@ -151,18 +240,28 @@
             if ($('#image_del_is_perm').val() == '1' && confirm(bgmL10n.warn_delete_all_images) == false)
                 return false;
 
-            var key, ids = '';
+            myatu_bgm.doDeleteRemoveImages(true);
 
-            for (key in myatu_bgm.image_selection)
-                ids += key.replace('image_', '') + ',';
+            return false;
+        },
 
-            // Delete the images from the DB
-            myatu_bgm.GetAjaxData('delete_images', ids);
+        /** Event triggered when `Remove Selected` is clicked */
+        onRemoveSelected: function(event) {
+            myatu_bgm.doDeleteRemoveImages(false);
 
-            myatu_bgm.showHideEditBar(true);
-            
-            if (myatu_bgm.haveImagesChanged(true))
-                myatu_bgm.loadImagesIframe();
+            return false;
+        },
+
+        /** Event triggered when 'Move Selected Left' is clicked */
+        onMoveLeftSelected: function(event) {
+            myatu_bgm.doMoveImages(false);
+
+            return false;
+        },
+
+        /** Event triggered when 'Move Selected Right' is clicked */
+        onMoveRightSelected: function(event) {
+            myatu_bgm.doMoveImages(true);
 
             return false;
         },
@@ -243,37 +342,51 @@
             if ($('#image_del_is_perm').val() == '1' && confirm(bgmL10n.warn_delete_image) == false)
                 return false;
 
-            // Delete the image from the DB
-            myatu_bgm.GetAjaxData('delete_images', $(this).attr('href').replace('#', ''));
+            myatu_bgm.doDeleteRemoveImages(true, $(this).attr('href').replace('#', ''));
 
-            myatu_bgm.showHideEditBar(true);
-            
-            if (myatu_bgm.haveImagesChanged(true))
-                myatu_bgm.loadImagesIframe();
-            
             return false;
         },
 
+        /** Event triggered when the `remove` button is clicked */
+        onImageRemoveButtonClick: function(event) {
+            myatu_bgm.doDeleteRemoveImages(false, $(this).attr('href').replace('#', ''));
+
+            return false;
+        },
+
+        /** Event triggered when the `move left` button is clicked */
+        onImageMoveLeftButtonClick: function(event) {
+            myatu_bgm.doMoveImages(false, $(this).attr('href').replace('#', ''));
+
+            return false;
+        },
+
+        /** Event triggered when the `move right` button is clicked */
+        onImageMoveRightButtonClick: function(event) {
+            myatu_bgm.doMoveImages(true, $(this).attr('href').replace('#', ''));
+
+            return false;
+        },
+
+
         /** Event tiggered when a key is pressed inside the iframe, to assist with selecting items by keyboard */
         onIframeKeyDown: function(event) {
-            var image_body = $('#images_iframe').contents().find('html,body'), image_container = $('#image_container', image_body), highlighted = $('.image.highlighted', image_container);
+            var image_body      = $('#images_iframe').contents().find('html,body'),
+                image_container = $('#image_container', image_body),
+                highlighted     = $('.image.highlighted', image_container),
+                doScroll        = function(which) {
+                    // Internal function to ensure a highlighted item, and then scroll to the highlighted item
+                    if (!highlighted.length && which != undefined)
+                        highlighted = $('.image:'+which, image_container).addClass('highlighted');
 
-            // Internal function to ensure a highlighted item, and then scroll to the highlighted item
-            var doScroll = function(which) { 
-                if (!highlighted.length && which != undefined) 
-                    highlighted = $('.image:'+which, image_container).addClass('highlighted');
+                    // Add any image buttons, if needed
+                    myatu_bgm.showHideImageButtons();
 
-                // Add any image buttons, if needed
-                myatu_bgm.showHideImageButtons();
+                    // Scroll to the item.
+                    if (image_body.length && highlighted.length)
+                        image_body.scrollTo(highlighted);
 
-                // Scroll to the item.
-                if (image_body.length && highlighted.length)
-                    image_body.scrollTo(highlighted);
-
-            };
-
-            // Internal function to get position, width and height details
-            var pos = function(obj) { return { x: $(obj).offset().left, y: $(obj).offset().top, w: $(obj).outerWidth(), h: $(obj).outerHeight() }; }
+                };
 
             // Event is based on specific keys:
             switch (event.keyCode) {
@@ -283,7 +396,7 @@
 
                     return false;
 
-                case 37: 
+                case 37:
                     // Left arrow
                     highlighted = highlighted.removeClass('highlighted').prev('.image').addClass('highlighted');
 
@@ -291,7 +404,7 @@
 
                     return false;
 
-                case 39: 
+                case 39:
                     // Right arrow
                     highlighted = highlighted.removeClass('highlighted').next('.image').addClass('highlighted');
 
@@ -301,7 +414,7 @@
             }
 
         }
-  
+
     });
 
     /** "Ready" event */
@@ -335,6 +448,9 @@
         // Attach 'click' events
         $('#ed_delete_selected').click(myatu_bgm.onDeleteSelected);
         $('#ed_clear_selected').click(myatu_bgm.onClearSelected);
+        $('#ed_remove_selected').click(myatu_bgm.onRemoveSelected);
+        $('#ed_move_l_selected').click(myatu_bgm.onMoveLeftSelected);
+        $('#ed_move_r_selected').click(myatu_bgm.onMoveRightSelected);
     });
 
 })(jQuery);

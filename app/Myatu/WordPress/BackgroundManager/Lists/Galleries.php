@@ -114,11 +114,11 @@ class Galleries extends \WP_List_Table
     function prepare_items()
     {
         // Grab the request data, if any
-        $orderby    = (!empty($_REQUEST['orderby'])) ? $_REQUEST['orderby'] : 'date';
+        $orderby    = (!empty($_REQUEST['orderby'])) ? $_REQUEST['orderby'] : 'modified';
         $order      = (!empty($_REQUEST['order']))   ? $_REQUEST['order']   : 'desc';
         
         // Ensure we have valid request values
-        $orderby = (in_array($orderby, array('date', 'title'))) ? $orderby : 'date';
+        $orderby = (in_array($orderby, array_keys($this->get_sortable_columns()))) ? $orderby : 'modified';
         $order   = ($order == 'asc') ? 'ASC' : 'DESC';
 
         // Figure out how many items and pages we have
@@ -143,7 +143,7 @@ class Galleries extends \WP_List_Table
             'post_type'   => \Myatu\WordPress\BackgroundManager\Main::PT_GALLERY,
             'post_status' => ($this->trash) ? 'trash' : '',
         ));
-        
+
         // ... and finally set the pagination args. 
         $this->set_pagination_args(
             array(
@@ -179,15 +179,16 @@ class Galleries extends \WP_List_Table
         if ($this->owner->inEdit())
             return array();
             
-        $prefix = ($this->trash) ? 'trash_' : '';
+        $prefix = ($this->trash) ? 'trash_' : ''; // obsolete
             
         return array(
-            'cb'                  => '<input type="checkbox" />',
-            'title'               => __('Title', $this->owner->getName()),
-            $prefix.'description' => __('Description', $this->owner->getName()),
-            'categories'          => __('Categories', $this->owner->getName()),
-            'tags'                => __('Tags', $this->owner->getName()),
-            $prefix.'images'      => __('Images', $this->owner->getName()),
+            'cb'            => '<input type="checkbox" />',
+            'title'         => __('Title', $this->owner->getName()),
+            'description'   => __('Description', $this->owner->getName()),
+            'categories'    => __('Categories', $this->owner->getName()),
+            'tags'          => __('Tags', $this->owner->getName()),
+            'images'        => __('Images', $this->owner->getName()),
+            'modified'      => __('Last Modified', $this->owner->getName()),
         );
     }
     
@@ -204,7 +205,10 @@ class Galleries extends \WP_List_Table
 	 */
 	function get_sortable_columns()
     {
-		return array('title' => array('title', true));
+		return array(
+            'title'    => array('title', false),
+            'modified' => array('modified', true)
+        );
 	}
     
     /**
@@ -297,29 +301,55 @@ class Galleries extends \WP_List_Table
     {
         echo $this->owner->images->getCount($item->ID);
     }
-    
-    /** Displays the `Images` column in the Trash */
-    function column_trash_images($item)
-    {
-        $this->column_images($item);
-    }
 
-    /** Displays the `Description` column in the Trash */
-    function column_trash_description($item)
+    /** Displays the `Last Modified` column */
+    function column_modified($item)
     {
-        $this->column_description($item);
+        $post_modified = strtotime($item->post_modified);
+        $time_diff     = time() - $post_modified;
+        
+        if ( $time_diff > 0 && $time_diff < 24*60*60 ) {
+            printf(__( '%s ago' ), human_time_diff( $post_modified ));
+        } else {
+            echo mysql2date(__( 'Y/m/d' ), $item->post_modified);
+        }
     }
     
-    /** Displays the `Categories` column */
+    /** Displays the `Categories` (terms) column */
     function column_categories($item)
     {
-        $cats   = get_post_meta($item->ID, 'myatu_bgm_override_cats', true);
-        $result = array();
+        $result         = array();
+        $reg_taxonomies = get_taxonomies(array('public' => true, 'show_ui' => true), 'objects');
         
-        if (is_array($cats))
-            foreach($cats as $cat)
-                $result[] = get_cat_name($cat);
-
+        foreach ($reg_taxonomies as $reg_taxonomy_key => $reg_taxonomy) {
+            if (stristr($reg_taxonomy_key, 'categor')) {
+                $non_wp_term = !$reg_taxonomy->_builtin;
+                
+                if ($reg_taxonomy_key == 'category') {
+                    $meta_tax = \Myatu\WordPress\BackgroundManager\Meta\Categories::META_TAX_PREFIX . 'cats';
+                } else {
+                    $meta_tax = \Myatu\WordPress\BackgroundManager\Meta\Categories::META_TAX_PREFIX . $reg_taxonomy_key;
+                }
+                
+                // Obtain selected terms in this taxonomy for the gallery
+                $terms = get_post_meta($item->ID, $meta_tax, true);
+                
+                // Convert Category ID's into names
+                if (is_array($terms)) {
+                    $is_first = true;
+                    foreach($terms as $term) {
+                        $term_name = get_term_field('name', $term, $reg_taxonomy_key);
+                        
+                        if ($is_first && $non_wp_term)
+                            $term_name = '<em>' . $reg_taxonomy->label . '</em>: ' . $term_name;
+                        
+                        $result[] = $term_name;
+                        $is_first = false;
+                    }
+                }
+            }
+        }        
+        
         echo implode(', ', $result);
     }
     

@@ -22,8 +22,19 @@ use Myatu\WordPress\BackgroundManager\Images;
  */
 class Local extends Importer
 {
-    const NAME = 'Local Directory';
-    const DESC = 'Imports images from a directory (and optionally its sub-directories) located on the web server';
+    const DYN_NAME = 'Local Directory';
+    const DYN_DESC = 'Imports images from a directory (and optionally its sub-directories) located on the web server';
+
+    /**
+     * Set to active at all times
+     */
+    static public function isActive()
+    {
+        if (!current_user_can('upload_files'))
+            return false;
+            
+        return true;
+    }    
     
     /**
      * Pre-import settings

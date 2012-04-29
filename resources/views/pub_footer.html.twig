@@ -9,8 +9,7 @@
 {% spaceless %}
 
 {# ------ Background Link (will be deleted by JS) ------ #}
-<a id="myatu_bgm_bg_link" class="myatu_bgm_fs" {% if random_image.bg_link %}href="{{ random_image.bg_link }}"{% else %}href="#" style="display:none"{% endif %}></a>
-
+{% if random_image.bg_link %}<a id="myatu_bgm_bg_link" class="myatu_bgm_fs" href="{{ random_image.bg_link }}"></a>{% endif %}
 
 {# ------ Overlay ------ #}
 {% if has_overlay %}<div id="myatu_bgm_overlay" class="myatu_bgm_fs"></div>{% endif %}
@@ -18,21 +17,30 @@
 
 {# ------ Full-size Image ------ #}
 {% if is_fullsize %}
-<img id="myatu_bgm_top" class="myatu_bgm_fs" src="{{ random_image.url }}" alt="{{ random_image.alt }}" {% if opacity < 100 %}style="-moz-opacity:.{{ opacity }}; filter:alpha(opacity={{ opacity }}); opacity:.{{ opacity }};"{% endif %}  />
 <script type="text/javascript">
 /*<![CDATA[*/
 {# UNCOMPRESSED:
 try {
     (function($){
-        $('#myatu_bgm_top').hide().imgLoaded(function() {
-            $(this).unbind('load').fadeIn('slow');
-        });
+        myatu_bgm.NewTopImage(
+            "{% if opacity < 100 %}-moz-opacity:.{{ opacity }};filter:alpha(opacity={{ opacity }});opacity:.{{ opacity }};{% endif %}",
+            "{{ random_image.alt }}",
+            "{{ random_image.url }}",
+            function() {
+                // Re-adjust image size to browser window
+                myatu_bgm.AdjustImageSize();
+
+                // Swap 'visibility' with 'display' and fade in
+                $(this).css({'display':'none','visibility':''}).fadeIn('slow');
+            }
+        );
     })(jQuery);
 } catch(e) {};
 #}
-try{(function(a){a("#myatu_bgm_top").hide().imgLoaded(function(){a(this).unbind("load").fadeIn("slow")})})(jQuery)}catch(e){};
+try{(function(a){myatu_bgm.NewTopImage("{% if opacity < 100 %}-moz-opacity:.{{ opacity }};filter:alpha(opacity={{ opacity }});opacity:.{{ opacity }};{% endif %}","{{ random_image.alt }}","{{ random_image.url }}",function(){myatu_bgm.AdjustImageSize();a(this).css({display:"none",visibility:""}).fadeIn("slow")})})(jQuery)}catch(e){};
 /*]]>*/
 </script>
+<noscript><img id="myatu_bgm_top" class="myatu_bgm_fs" src="{{ random_image.url }}" alt="{{ random_image.alt }}" {% if opacity < 100 %}style="-moz-opacity:.{{ opacity }}; filter:alpha(opacity={{ opacity }}); opacity:.{{ opacity }};"{% endif %}  /></noscript>
 {% endif %}
 
 
@@ -48,13 +56,13 @@ try{(function(a){a("#myatu_bgm_top").hide().imgLoaded(function(){a(this).unbind(
     if (window.PinIt.loaded) return;
     window.PinIt.loaded = true;
     function async_load(){
-        var s = document.createElement("script");
+        var s = document.createElement("script"), l = "assets.pinterest.com/js/pinit.js";
         s.type = "text/javascript";
         s.async = true;
         if (window.location.protocol == "https:")
-            s.src = "https://assets.pinterest.com/js/pinit.js";
+            s.src = "https://" + l;
         else
-            s.src = "http://assets.pinterest.com/js/pinit.js";
+            s.src = "http://" + l;
         var x = document.getElementsByTagName("script")[0];
         x.parentNode.insertBefore(s, x);
     }
@@ -64,7 +72,7 @@ try{(function(a){a("#myatu_bgm_top").hide().imgLoaded(function(){a(this).unbind(
         window.addEventListener("load", async_load, false);
 })();
 #}
-(function(){window.PinIt=window.PinIt||{loaded:false};if(window.PinIt.loaded){return}window.PinIt.loaded=true;function a(){var c=document.createElement("script");c.type="text/javascript";c.async=true;if(window.location.protocol=="https:"){c.src="https://assets.pinterest.com/js/pinit.js"}else{c.src="http://assets.pinterest.com/js/pinit.js"}var b=document.getElementsByTagName("script")[0];b.parentNode.insertBefore(c,b)}if(window.attachEvent){window.attachEvent("onload",a)}else{window.addEventListener("load",a,false)}})();
+(function(){window.PinIt=window.PinIt||{loaded:false};if(window.PinIt.loaded){return}window.PinIt.loaded=true;function a(){var d=document.createElement("script"),c="assets.pinterest.com/js/pinit.js";d.type="text/javascript";d.async=true;if(window.location.protocol=="https:"){d.src="https://"+c}else{d.src="http://"+c}var b=document.getElementsByTagName("script")[0];b.parentNode.insertBefore(d,b)}if(window.attachEvent){window.attachEvent("onload",a)}else{window.addEventListener("load",a,false)}})();
 /*]]>*/
 </script>
 

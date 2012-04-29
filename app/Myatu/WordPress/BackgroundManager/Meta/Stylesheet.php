@@ -18,7 +18,7 @@ use Pf4wp\Meta\PostMetabox;
  * @package BackgroundManager
  * @subpackage Meta
  */
-class Stylesheet extends PostMetabox
+class Stylesheet extends PostMetabox implements \Pf4wp\Dynamic\DynamicInterface
 {
     const MT_CSS = 'myatu_bgm_css';
     
@@ -39,6 +39,18 @@ class Stylesheet extends PostMetabox
     }
     
     /**
+     * Info for dynamic loading
+     */
+    public static function info()
+    {
+        return array(
+            'name'   => '', // Not used
+            'desc'   => '', // Not used
+            'active' => true,
+        );
+    }    
+    
+    /**
      * Event called when ready to render the Metabox contents 
      *
      * @param int $id ID of the gallery
@@ -46,7 +58,9 @@ class Stylesheet extends PostMetabox
      */
     public function onRender($id, $gallery)
     {
-        $vars = array('custom_css' => get_post_meta($id, self::MT_CSS, true), 'theme_name' => get_current_theme());
+        $current_theme = (function_exists('wp_get_theme')) ? wp_get_theme() : get_current_theme(); // WP 3.4
+        
+        $vars = array('custom_css' => get_post_meta($id, self::MT_CSS, true), 'theme_name' => $current_theme);
         
         $this->owner->template->display('meta_gallery_css.html.twig', $vars);    
     }

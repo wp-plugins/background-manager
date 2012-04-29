@@ -45,12 +45,40 @@
                 </tr>
                 <tr valign="top">
                     <th scope="row">
-                        {{ __('Select a random image') }}
+                        {{ __('Image selection order') }}
+                    </th>
+                    <td>
+                        <fieldset id="image_sel">
+                            <legend class="screen-reader-text">
+                                <span>{{ __('Image selection order') }}</span>
+                            </legend>
+                            <label>
+                                <input id="image_sel_random" type="radio" value="random" name="image_selection" {% if image_selection == 'random' %}checked="checked"{% endif %} />
+                                <span>{{ __('Random') }}</span>
+                            </label>
+                            <div class="image_sel_ad">
+                                <label>
+                                    <input id="image_sel_asc" type="radio" value="asc" name="image_selection" {% if image_selection == 'asc' %}checked="checked"{% endif %} />
+                                    <span>{{ __('Ascending') }}</span>
+                                </label>
+                                <br />
+                                <label>
+                                    <input id="image_sel_desc" type="radio" value="desc" name="image_selection" {% if image_selection == 'desc' %}checked="checked"{% endif %} />
+                                    <span>{{ __('Descending') }}</span>
+                                </label>
+                            </div>
+                        </fieldset>
+                    </td>
+                </tr>
+
+                <tr valign="top">
+                    <th scope="row">
+                        {{ __('Select an image') }}
                     </th>
                     <td>
                         <fieldset id="rand_sel">
                             <legend class="screen-reader-text">
-                                <span>{{ __('Select a random image') }}</span>
+                                <span>{{ __('Select an image') }}</span>
                             </legend>
                             <label>
                                 <input class="change_freq" type="radio" value="session" name="change_freq" {% if change_freq == 'session' %}checked="checked"{% endif %} />
@@ -170,6 +198,33 @@
                         </div>
                         <div id="opacity_picker" class="hide-if-no-js myatu_inline_block"></div>
                         <span id="opacity_picker_val" class="hide-if-no-js">{{ background_opacity }}%</span>
+                    </td>
+                </tr>
+                <tr valign="top" class="bg_fs_layout">
+                    <th scope="row">
+                        {{ __('Adjust Image Size') }}
+                    </th>
+                    <td>
+                        <fieldset id="full_screen_adjust_fs">
+                            <label>
+                                <input type="checkbox" value="1" id="full_screen_adjust" name="full_screen_adjust" {% if full_screen_adjust %}checked="checked"{% endif %} />
+                                <span>{{ __('Enabled') }}</span>
+                                <span class="description">({{ __('Requires Javascript by the visitor, but will gracefully degrade if not available') }})</span>
+                            </label>
+                        </fieldset>
+                    </td>
+                </tr>
+                <tr valign="top" class="bg_fs_adjust">
+                    <th scope="row">
+                        {{ __('Center Image') }}
+                    </th>
+                    <td>
+                        <fieldset id="full_screen_center_fs">
+                            <label>
+                                <input type="checkbox" value="1" id="full_screen_center" name="full_screen_center" {% if full_screen_center %}checked="checked"{% endif %} />
+                                <span>{{ __('Enabled') }}</span>
+                            </label>
+                        </fieldset>
                     </td>
                 </tr>
                 <tr valign="top" class="bg_extra_layout">
@@ -426,6 +481,25 @@
             </tbody>
         </table>
 
+        <h3>{{ __('Miscellaneous') }}</h3>
+        <table class="form-table">
+            <tbody>
+                <tr valign="top">
+                    <th scope="row">
+                        {{ __('Override Posts and Pages') }}
+                    </th>
+                    <td>
+                        <p>Allow users with the following role to override the background <em>Image Set</em>, <em>Overlay</em> and <em>Color</em> of individual posts and pages:</p>
+                        <select id="single_post_override" class="postform" name="single_post_override">
+                            {% for role,role_title in roles %}
+                            <option {% if role == single_post_override %}selected="selected"{% endif %} value="{{ role }}">{{ role_title }}</option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
         {{ submit_button | raw }}
 
     </form>
@@ -433,8 +507,8 @@
     <div id="my_footer">
         <img src="{{ plugin_base_url }}resources/images/myatus_logo_white.png" alt="Myatu's"/><br>
         <span>
-            <a href="{{ plugin_home }}" target="_blank">{{plugin_name }} {{ plugin_version }}</a> | 
-            <a href="#" id="footer_debug_link">{{ __('Debug') }}</a> | 
+            <a href="{{ plugin_home }}" target="_blank">{{plugin_name }} {{ plugin_version }}</a> |
+            <a href="#" id="footer_debug_link">{{ __('Debug') }}</a> |
             <a href="http://wordpress.org/extend/plugins/background-manager/" target="_blank">{{ __('Rate It') }}</a> |
             <a href="http://wordpress.org/tags/background-manager" target="_blank">{{ __('Forum') }}</a> |
             <a href="http://pledgie.com/campaigns/16906" target="_blank">{{ __('Donate') }}</a>
@@ -445,7 +519,7 @@
         <table class="form-table">
             <tbody>
                 {% for debug_name, debug_value in debug_info %}
-                <tr>    
+                <tr>
                     <th scope="row" style="font-weight: bold;">{{ debug_name }}:</th>
                     <td>{{ debug_value }}</td>
                 </tr>

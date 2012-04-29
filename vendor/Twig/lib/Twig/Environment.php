@@ -17,7 +17,7 @@
  */
 class Twig_Environment
 {
-    const VERSION = '1.7.0-DEV';
+    const VERSION = '1.8.0-DEV';
 
     protected $charset;
     protected $loader;
@@ -60,7 +60,7 @@ class Twig_Environment
      *                         templates (default to Twig_Template).
      *
      *  * cache: An absolute path where to store the compiled templates, or
-     *           false to disable compilation cache (default)
+     *           false to disable compilation cache (default).
      *
      *  * auto_reload: Whether to reload the template is the original source changed.
      *                 If you don't provide the auto_reload option, it will be
@@ -69,11 +69,15 @@ class Twig_Environment
      *  * strict_variables: Whether to ignore invalid variables in templates
      *                      (default to false).
      *
-     *  * autoescape: Whether to enable auto-escaping (default to true);
+     *  * autoescape: Whether to enable auto-escaping (default to html):
+     *                  * false: disable auto-escaping
+     *                  * true: equivalent to html
+     *                  * html, js: set the autoescaping to one of the supported strategies
+     *                  * PHP callback: a PHP callback that returns an escaping strategy based on the template "filename"
      *
      *  * optimizations: A flag that indicates which optimizations to apply
      *                   (default to -1 which means that all optimizations are enabled;
-     *                   set it to 0 to disable)
+     *                   set it to 0 to disable).
      *
      * @param Twig_LoaderInterface   $loader  A Twig_LoaderInterface instance
      * @param array                  $options An array of options
@@ -89,7 +93,7 @@ class Twig_Environment
             'charset'             => 'UTF-8',
             'base_template_class' => 'Twig_Template',
             'strict_variables'    => false,
-            'autoescape'          => true,
+            'autoescape'          => 'html',
             'cache'               => false,
             'auto_reload'         => null,
             'optimizations'       => -1,
@@ -101,7 +105,7 @@ class Twig_Environment
         $this->autoReload         = null === $options['auto_reload'] ? $this->debug : (bool) $options['auto_reload'];
         $this->extensions         = array(
             'core'      => new Twig_Extension_Core(),
-            'escaper'   => new Twig_Extension_Escaper((bool) $options['autoescape']),
+            'escaper'   => new Twig_Extension_Escaper($options['autoescape']),
             'optimizer' => new Twig_Extension_Optimizer($options['optimizations']),
         );
         $this->strictVariables    = (bool) $options['strict_variables'];
@@ -251,13 +255,14 @@ class Twig_Environment
     /**
      * Gets the template class associated with the given string.
      *
-     * @param string $name The name for which to calculate the template class name
+     * @param string  $name  The name for which to calculate the template class name
+     * @param integer $index The index if it is an embedded template
      *
      * @return string The template class name
      */
-    public function getTemplateClass($name)
+    public function getTemplateClass($name, $index = null)
     {
-        return $this->templateClassPrefix.md5($this->loader->getCacheKey($name));
+        return $this->templateClassPrefix.md5($this->loader->getCacheKey($name)).(null === $index ? '' : '_'.$index);
     }
 
     /**
@@ -297,13 +302,14 @@ class Twig_Environment
     /**
      * Loads a template by name.
      *
-     * @param  string  $name  The template name
+     * @param string  $name  The template name
+     * @param integer $index The index if it is an embedded template
      *
      * @return Twig_TemplateInterface A template instance representing the given template name
      */
-    public function loadTemplate($name)
+    public function loadTemplate($name, $index = null)
     {
-        $cls = $this->getTemplateClass($name);
+        $cls = $this->getTemplateClass($name, $index);
 
         if (isset($this->loadedTemplates[$cls])) {
             return $this->loadedTemplates[$cls];
@@ -695,7 +701,7 @@ class Twig_Environment
                 foreach($parsers as $parser) {
                     if ($parser instanceof Twig_TokenParserInterface) {
                         $this->parsers->addTokenParser($parser);
-                    } else if ($parser instanceof Twig_TokenParserBrokerInterface) {
+                    } elseif ($parser instanceof Twig_TokenParserBrokerInterface) {
                         $this->parsers->addTokenParserBroker($parser);
                     } else {
                         throw new Twig_Error_Runtime('getTokenParsers() must return an array of Twig_TokenParserInterface or Twig_TokenParserBrokerInterface instances');
@@ -973,6 +979,26 @@ class Twig_Environment
     }
 
     /**
+     * Merges a context with the defined globals.
+     *
+     * @param array $context An array representing the context
+     *
+     * @return array The context merged with the globals
+     */
+    public function mergeGlobals(array $context)
+    {
+        // we don't use array_merge as the context being generally
+        // bigger than globals, this code is faster.
+        foreach ($this->getGlobals() as $key => $value) {
+            if (!array_key_exists($key, $context)) {
+                $context[$key] = $value;
+            }
+        }
+
+        return $context;
+    }
+
+    /**
      * Gets the registered unary Operators.
      *
      * @return array An array of unary operators
@@ -1049,7 +1075,7 @@ class Twig_Environment
         if (false !== @file_put_contents($tmpFile, $content)) {
             // rename does not work on Win32 before 5.2.6
             if (@rename($tmpFile, $file) || (@copy($tmpFile, $file) && unlink($tmpFile))) {
-                chmod($file, 0644);
+                @chmod($file, 0644);
 
                 return;
             }
