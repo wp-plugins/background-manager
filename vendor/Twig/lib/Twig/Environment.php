@@ -17,7 +17,7 @@
  */
 class Twig_Environment
 {
-    const VERSION = '1.9.0-DEV';
+    const VERSION = '1.7.0';
 
     protected $charset;
     protected $loader;
@@ -60,7 +60,7 @@ class Twig_Environment
      *                         templates (default to Twig_Template).
      *
      *  * cache: An absolute path where to store the compiled templates, or
-     *           false to disable compilation cache (default).
+     *           false to disable compilation cache (default)
      *
      *  * auto_reload: Whether to reload the template is the original source changed.
      *                 If you don't provide the auto_reload option, it will be
@@ -69,15 +69,11 @@ class Twig_Environment
      *  * strict_variables: Whether to ignore invalid variables in templates
      *                      (default to false).
      *
-     *  * autoescape: Whether to enable auto-escaping (default to html):
-     *                  * false: disable auto-escaping
-     *                  * true: equivalent to html
-     *                  * html, js: set the autoescaping to one of the supported strategies
-     *                  * PHP callback: a PHP callback that returns an escaping strategy based on the template "filename"
+     *  * autoescape: Whether to enable auto-escaping (default to true);
      *
      *  * optimizations: A flag that indicates which optimizations to apply
      *                   (default to -1 which means that all optimizations are enabled;
-     *                   set it to 0 to disable).
+     *                   set it to 0 to disable)
      *
      * @param Twig_LoaderInterface   $loader  A Twig_LoaderInterface instance
      * @param array                  $options An array of options
@@ -93,7 +89,7 @@ class Twig_Environment
             'charset'             => 'UTF-8',
             'base_template_class' => 'Twig_Template',
             'strict_variables'    => false,
-            'autoescape'          => 'html',
+            'autoescape'          => true,
             'cache'               => false,
             'auto_reload'         => null,
             'optimizations'       => -1,
@@ -105,7 +101,7 @@ class Twig_Environment
         $this->autoReload         = null === $options['auto_reload'] ? $this->debug : (bool) $options['auto_reload'];
         $this->extensions         = array(
             'core'      => new Twig_Extension_Core(),
-            'escaper'   => new Twig_Extension_Escaper($options['autoescape']),
+            'escaper'   => new Twig_Extension_Escaper((bool) $options['autoescape']),
             'optimizer' => new Twig_Extension_Optimizer($options['optimizations']),
         );
         $this->strictVariables    = (bool) $options['strict_variables'];
@@ -113,14 +109,6 @@ class Twig_Environment
         $this->setCache($options['cache']);
         $this->functionCallbacks = array();
         $this->filterCallbacks = array();
-        $this->staging = array(
-            'functions'     => array(),
-            'filters'       => array(),
-            'tests'         => array(),
-            'token_parsers' => array(),
-            'visitors'      => array(),
-            'globals'       => array(),
-        );
     }
 
     /**
@@ -263,14 +251,13 @@ class Twig_Environment
     /**
      * Gets the template class associated with the given string.
      *
-     * @param string  $name  The name for which to calculate the template class name
-     * @param integer $index The index if it is an embedded template
+     * @param string $name The name for which to calculate the template class name
      *
      * @return string The template class name
      */
-    public function getTemplateClass($name, $index = null)
+    public function getTemplateClass($name)
     {
-        return $this->templateClassPrefix.md5($this->loader->getCacheKey($name)).(null === $index ? '' : '_'.$index);
+        return $this->templateClassPrefix.md5($this->loader->getCacheKey($name));
     }
 
     /**
@@ -310,14 +297,13 @@ class Twig_Environment
     /**
      * Loads a template by name.
      *
-     * @param string  $name  The template name
-     * @param integer $index The index if it is an embedded template
+     * @param  string  $name  The template name
      *
      * @return Twig_TemplateInterface A template instance representing the given template name
      */
-    public function loadTemplate($name, $index = null)
+    public function loadTemplate($name)
     {
-        $cls = $this->getTemplateClass($name, $index);
+        $cls = $this->getTemplateClass($name);
 
         if (isset($this->loadedTemplates[$cls])) {
             return $this->loadedTemplates[$cls];
@@ -759,13 +745,10 @@ class Twig_Environment
     public function getNodeVisitors()
     {
         if (null === $this->visitors) {
+            $this->visitors = isset($this->staging['visitors']) ? $this->staging['visitors'] : array();
             foreach ($this->getExtensions() as $extension) {
-                foreach ($extension->getNodeVisitors() as $visitor) {
-                    $this->addNodeVisitor($visitor);
-                }
+                $this->visitors = array_merge($this->visitors, $extension->getNodeVisitors());
             }
-
-            $this->visitors = $this->staging['visitors'];
         }
 
         return $this->visitors;
@@ -842,13 +825,10 @@ class Twig_Environment
     public function getFilters()
     {
         if (null === $this->filters) {
+            $this->filters = isset($this->staging['filters']) ? $this->staging['filters'] : array();
             foreach ($this->getExtensions() as $extension) {
-                foreach ($extension->getFilters() as $name => $filter) {
-                    $this->addFilter($name, $filter);
-                }
+                $this->filters = array_merge($this->filters, $extension->getFilters());
             }
-
-            $this->filters = $this->staging['filters'];
         }
 
         return $this->filters;
@@ -874,13 +854,10 @@ class Twig_Environment
     public function getTests()
     {
         if (null === $this->tests) {
+            $this->tests = isset($this->staging['tests']) ? $this->staging['tests'] : array();
             foreach ($this->getExtensions() as $extension) {
-                foreach ($extension->getTests() as $name => $test) {
-                    $this->addTest($name, $test);
-                }
+                $this->tests = array_merge($this->tests, $extension->getTests());
             }
-
-            $this->tests = $this->staging['tests'];
         }
 
         return $this->tests;
@@ -957,13 +934,10 @@ class Twig_Environment
     public function getFunctions()
     {
         if (null === $this->functions) {
+            $this->functions = isset($this->staging['functions']) ? $this->staging['functions'] : array();
             foreach ($this->getExtensions() as $extension) {
-                foreach ($extension->getFunctions() as $name => $function) {
-                    $this->addFunction($name, $function);
-                }
+                $this->functions = array_merge($this->functions, $extension->getFunctions());
             }
-
-            $this->functions = $this->staging['functions'];
         }
 
         return $this->functions;

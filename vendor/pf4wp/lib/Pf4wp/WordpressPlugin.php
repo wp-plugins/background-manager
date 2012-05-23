@@ -18,7 +18,6 @@ use Pf4wp\Menu\StandardMenu;
 use Pf4wp\Menu\MenuEntry;
 use Pf4wp\Widgets\Widget;
 use Pf4wp\Template\NullEngine;
-use Pf4wp\Template\TwigEngine;
 
 /**
  * WordpressPlugin (Pf4wp) provides a base framework to develop plugins for WordPress.
@@ -32,7 +31,7 @@ use Pf4wp\Template\TwigEngine;
  * WordPress: 3.1.0
  *
  * @author Mike Green <myatus@gmail.com>
- * @version 1.0.9
+ * @version 1.0.10
  * @package Pf4wp
  * @api
  */
@@ -87,6 +86,12 @@ class WordpressPlugin
      * @api
      */
     public $template;
+
+    /**
+     * The template engine to use
+     * @api
+     */
+    protected $template_engine = 'Pf4wp\Template\TwigEngine';
 
     /**
      * The options to pass to the template engine object upon creation
@@ -292,16 +297,18 @@ class WordpressPlugin
             return;
         }
 
-        // Template Engine (currently Twig)
-        $views_dir = $this->getPluginDir() . static::VIEWS_DIR;
+        // Template Engine initialization
+        $views_dir       = $this->getPluginDir() . static::VIEWS_DIR;
+        $template_engine = false;
 
-        if (@is_dir($views_dir) && @is_readable($views_dir)) {
-            $options = array(
-                'charset'           => 'utf-8',
-                'strict_variables'  => false,
-                'autoescape'        => 'html',
-                'optimizations'     => 1,
-            );
+        if (class_exists($this->template_engine)) {
+            $rc = new \ ReflectionClass($this->template_engine);
+            if ($rc->implementsInterface('Pf4wp\Template\EngineInterface'))
+                $template_engine = $this->template_engine;
+        }
+
+        if ($template_engine && @is_dir($views_dir) && @is_readable($views_dir)) {
+            $options = array('_textdomain' => $this->name);
 
             if (defined('WP_DEBUG') && WP_DEBUG)
                 $options['debug'] = true;
@@ -309,16 +316,10 @@ class WordpressPlugin
             if (($cache = StoragePath::validate($this->getPluginDir() . static::VIEWS_CACHE_DIR)) !== false)
                 $options['cache'] = $cache;
 
-            // Merge these options with those specified by the plugin developer, if any
-            $options = array_merge($options, $this->template_options);
+            // Replace these options with those specified by the plugin developer, if any
+            $options = array_replace($options, $this->template_options);
 
-            $this->template = new TwigEngine($views_dir, $options);
-
-            // Add Twig translation extension automatically
-            $translate_extension = new \Pf4wp\Template\Extensions\Twig\Translate();
-            $translate_extension->setTextDomain($this->name);
-
-            $this->template->getEngine()->addExtension($translate_extension);
+            $this->template = new $template_engine($views_dir, $options);
         }
 
         // Internal and Admin events
@@ -615,6 +616,51 @@ class WordpressPlugin
     public function clearDelayedNotices()
     {
         $this->internal_options->delayed_notices = array();
+    }
+
+    /**
+     * Provides debug information for displaying
+     *
+     * The information is in the array as "Display Name" => "Display Value"
+     *
+     * @since 1.0.10
+     * @api
+     */
+    public function getDebugInfo()
+    {
+        global $wp_version, $wpdb;
+
+        $active_plugins = array();
+        $mem_peak       = (function_exists('memory_get_peak_usage')) ? memory_get_peak_usage() / 1048576 : 0;
+        $mem_usage      = (function_exists('memory_get_usage')) ? memory_get_usage() / 1048576 : 0;
+        $mem_max        = (int) @ini_get('memory_limit');
+        $current_theme  = (function_exists('wp_get_theme')) ? wp_get_theme() : get_current_theme(); // WP 3.4
+
+        foreach (\Pf4wp\Info\PluginInfo::getInfo(true) as $plugin)
+            $active_plugins[] = sprintf("'%s' by %s", $plugin['Name'], $plugin['Author']);
+
+        $result = array(
+            'Generated On'              => gmdate('D, d M Y H:i:s') . ' GMT',
+            $this->getDisplayName() . ' Version' => $this->getVersion(),
+            'PHP Version'               => PHP_VERSION,
+            'Memory Usage'              => sprintf('%.2f MB Peak, %.2f MB Current, %d MB Max permitted by PHP', $mem_peak, $mem_usage, $mem_max),
+            'Available PHP Extensions'  => implode(', ', get_loaded_extensions()),
+            'Pf4wp Version'             => PF4WP_VERSION,
+            'Pf4wp APC Enabled'         => (PF4WP_APC) ? 'Yes' : 'No',
+            'WordPress Version'         => $wp_version,
+            'WordPress Debug Mode'      => (defined('WP_DEBUG') && WP_DEBUG) ? 'Yes' : 'No',
+            'Active WordPress Theme'    => $current_theme,
+            'Active Wordpress Plugins'  => implode(', ', $active_plugins),
+            'Browser'                   => $_SERVER['HTTP_USER_AGENT'],
+            'Server'                    => $_SERVER['SERVER_SOFTWARE'],
+            'Server OS'                 => php_uname(),
+            'Database Version'          => $wpdb->get_var('SELECT VERSION()'),
+        );
+
+        if (is_callable(array($this->template, 'getVersion')) && is_callable(array($this->template, 'getEngineName')))
+            $result['Template Engine Version'] = $this->template->getEngineName()  . ' ' . $this->template->getVersion();
+
+        return $result;
     }
 
     /*---------- Private Helpers (callbacks have a public scope!) ----------*/

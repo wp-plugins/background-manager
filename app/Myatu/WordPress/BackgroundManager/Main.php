@@ -101,6 +101,7 @@ class Main extends \Pf4wp\WordpressPlugin
         'info_tab_desc'          => true,
         'pin_it_btn_location'    => 'bottom-left', // Since 1.0.20
         'single_post_override'   => 'admin',       // Since 1.0.39
+        'initial_ease_in'        => true,          // Since 1.0.44
     );
 
     /** The options can be filtered (prefixed by BASE_PUB_PREFIX in `apply_filters`) - @see getFilteredOptions */
@@ -129,6 +130,7 @@ class Main extends \Pf4wp\WordpressPlugin
         'pin_it_btn_location',
         'full_screen_center',
         'full_screen_adjust',
+        'initial_ease_in',
     );
 
     /* Enable public-side Ajax - @see onAjaxRequest() */
@@ -464,7 +466,11 @@ class Main extends \Pf4wp\WordpressPlugin
         if (!isset($this->np_cache['can_display_background'])) {
             /* When is_home() is set, it does not report is_page() (even though it is). We use this
              * to figure out if we're at the greeting page */
-            $is_at_door = (home_url() == wp_guess_url());
+            $current_url = wp_guess_url();
+            if ($qa = strpos($current_url, '?'))
+                $current_url = substr($current_url, 0, $qa);
+
+            $is_at_door  = (trailingslashit(home_url()) == trailingslashit($current_url));
 
             $this->np_cache['can_display_background']  = (
                 ($this->options->display_on_front_page  && $is_at_door)     ||
@@ -1261,10 +1267,11 @@ class Main extends \Pf4wp\WordpressPlugin
 
         // Spit out variables for JavaScript to use
         $script_vars = array(
-            'change_freq'    => $script_change_freq,
-            'active_gallery' => $active_gallery,
-            'is_fullsize'    => ($background_size == static::BS_FULL) ? 'true' : 'false',
-            'is_preview'     => ($is_preview) ? 'true' : 'false',
+            'change_freq'     => $script_change_freq,
+            'active_gallery'  => $active_gallery,
+            'is_fullsize'     => ($background_size == static::BS_FULL) ? 'true' : 'false',
+            'is_preview'      => ($is_preview) ? 'true' : 'false',
+            'initial_ease_in' => ($initial_ease_in) ? 'true' : 'false',
         );
 
         // Add to variables if in full screen mode
