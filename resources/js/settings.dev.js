@@ -20,22 +20,6 @@ if (typeof myatu_bgm === "undefined") {
             myatu_bgm.updateBackgroundOpacity((!is_full) ? 100 : false);    // Fix opacity to 100 if not 'Full Screen'
 
             myatu_bgm.showHideBackgroundTransition();                       // Determine if we can show Background Transition settings
-            myatu_bgm.showHideFullScreenAdjust();                           // Determine if we can show additional FS Adjust settings
-        },
-
-        /** Hides or shows additional setting if Image Adjusting is enabled */
-        showHideFullScreenAdjust: function() {
-            var is_full = ($('input[name="background_size"]:checked').val() === 'full'),
-                checked = $('#full_screen_adjust').is(':checked'),
-                show    = true;
-
-            if (!is_full) {
-                show = false;
-            } else {
-                show = checked;
-            }
-
-            myatu_bgm.showHide('.bg_fs_adjust', show);
         },
 
         /** Hides or shows additional settings for Background Information */
@@ -46,6 +30,11 @@ if (typeof myatu_bgm === "undefined") {
         /** Hides or shows additional settings for "Pin It" button */
         showHidePinItBtnExtra: function() {
             myatu_bgm.showHide('.pin_it_btn_extra', $('#pin_it_btn').is(':checked'));
+        },
+
+        /** Hides or shows additional settings for "Track Background Clicks" setting */
+        showHideTrackClicksExtra: function() {
+            myatu_bgm.showHide('#bg_track_clicks_extra', $('#bg_track_clicks').is(':checked'));
         },
 
         /** Hides or shows the "Ascending" and "Descending" option, if the change frequency is custom (see Background Transition event) */
@@ -237,6 +226,7 @@ if (typeof myatu_bgm === "undefined") {
 
         $('#info_tab').change(myatu_bgm.showHideInfoExtra);                             myatu_bgm.showHideInfoExtra();
         $('#pin_it_btn').change(myatu_bgm.showHidePinItBtnExtra);                       myatu_bgm.showHidePinItBtnExtra();
+        $('#bg_track_clicks').change(myatu_bgm.showHideTrackClicksExtra);               myatu_bgm.showHideTrackClicksExtra();
         $('input[name="background_size"]').change(myatu_bgm.showHideLayoutTable);       myatu_bgm.showHideLayoutTable();
         $('#active_gallery').change(myatu_bgm.updatePreviewGallery);                    myatu_bgm.updatePreviewGallery();
         $('#active_overlay').change(myatu_bgm.updatePreviewOverlay);                    myatu_bgm.updatePreviewOverlay();
@@ -245,7 +235,6 @@ if (typeof myatu_bgm === "undefined") {
         $('input[name="background_repeat"]').change(myatu_bgm.updatePreviewLayout);     // ..
         $('#background_stretch_horizontal').change(myatu_bgm.updatePreviewLayout);      // ..
         $('#background_stretch_vertical').change(myatu_bgm.updatePreviewLayout);        // ..
-        $('#full_screen_adjust').change(myatu_bgm.showHideFullScreenAdjust);            // ..
         $('input[name="change_freq"]').change(myatu_bgm.showHideBackgroundTransition);  // No pre-set (handled by updatePreviewLayout())
 
         // Button

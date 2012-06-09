@@ -72,10 +72,12 @@ class Settings
             'info_tab_desc'                 => 'bool',
             'pin_it_btn'                    => 'bool',
             'pin_it_btn_location'           => array('in_array', $this->owner->getBgOptions('corner')),
-            'full_screen_adjust'            => 'bool',
             'full_screen_center'            => 'bool',
             'single_post_override'          => array('in_array', $this->owner->getBgOptions('role')),
             'initial_ease_in'               => 'bool',
+            'bg_click_new_window'           => 'bool',
+            'bg_track_clicks'               => 'bool',
+            'bg_track_clicks_category'      => 'string',
         );
 
         if ($want_values) {
