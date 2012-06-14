@@ -19,26 +19,44 @@ namespace Pf4wp\Template;
  */
 class TwigEngine implements EngineInterface
 {
+    private $engine_name = 'Twig';
+
+
     /** Reference to Twig_Environment object
      * @internal
      */
     protected $engine;
-    
+
+    /**
+     * Options passed during construct
+     * @internal
+     */
+    protected $options;
+
     /**
      * Constructor
      *
      * @param string $template_path Path containing the templates
      * @param mixed $options Options to pass to the template engine
      */
-    public function __construct($template_path, $options)
+    public function __construct($template_path, array $options)
     {
         if (class_exists('\Twig_Autoloader')) {
             \Twig_Autoloader::register();
-           
-            $this->engine = new \Twig_Environment(new \Twig_Loader_Filesystem($template_path), $options);
+
+            $this->options = $options;
+            $this->engine  = new \Twig_Environment(new \Twig_Loader_Filesystem($template_path), $this->options);
+
+            // Add Twig translation extension automatically
+            $translate_extension = new \Pf4wp\Template\Extensions\Twig\Translate();
+
+            if (isset($this->options['_textdomain']))
+                $translate_extension->setTextDomain($this->options['_textdomain']);
+
+            $this->engine->addExtension($translate_extension);
         }
     }
-    
+
     /**
      * Returns the actual Twig engine instance
      */
@@ -46,7 +64,29 @@ class TwigEngine implements EngineInterface
     {
         return $this->engine;
     }
-    
+
+    /**
+     * Returns the version of the Twig engine
+     * @since 1.0.10
+     */
+    public function getVersion()
+    {
+        if (isset($this->engine)) {
+            $engine = $this->engine;
+            return $engine::VERSION;
+        }
+
+        return false;
+    }
+
+    /**
+     * Returns the name of the engine ('Twig')
+     */
+    public function getEngineName()
+    {
+        return $this->engine_name;
+    }
+
     /**
      * Loads the given template
      *
@@ -64,8 +104,8 @@ class TwigEngine implements EngineInterface
         } catch (\Twig_Error_Loader $e) {
             throw new \InvalidArgumentException($e->getMessage(), $e->getCode(), $e);
         }
-    }    
-    
+    }
+
     /**
      * Renders a template
      *
@@ -80,10 +120,10 @@ class TwigEngine implements EngineInterface
     {
         if (!isset($this->engine))
             return '';
-            
+
         return $this->load($name)->render($parameters);
     }
-    
+
     /**
      * Displays a template
      *
@@ -97,7 +137,7 @@ class TwigEngine implements EngineInterface
     {
         if (!isset($this->engine))
             return;
-            
+
         $this->load($name)->display($parameters);
     }
 }
