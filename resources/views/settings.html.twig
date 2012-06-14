@@ -95,7 +95,7 @@
                                 <input class="change_freq" type="radio" value="custom" name="change_freq" {% if change_freq == 'custom' %}checked="checked"{% endif %} />
                                 <span>{{ __('Every') }}</span>
                             </label>
-                            <input type="text" class="small-text" value="{{ change_freq_custom }}" name="change_freq_custom" />
+                            <input type="number" min="1" max="60" class="small-text" value="{{ change_freq_custom }}" name="change_freq_custom" />
                             <span>{{ __('seconds') }}</span>
                             <span class="description">({{ __('Requires Javascript by the visitor, but will gracefully degrade if not available') }})</span>
                         </fieldset>
@@ -202,24 +202,10 @@
                 </tr>
                 <tr valign="top" class="bg_fs_layout">
                     <th scope="row">
-                        {{ __('Adjust Image Size') }}
-                    </th>
-                    <td>
-                        <fieldset id="full_screen_adjust_fs">
-                            <label>
-                                <input type="checkbox" value="1" id="full_screen_adjust" name="full_screen_adjust" {% if full_screen_adjust %}checked="checked"{% endif %} />
-                                <span>{{ __('Enabled') }}</span>
-                                <span class="description">({{ __('Requires Javascript by the visitor, but will gracefully degrade if not available') }})</span>
-                            </label>
-                        </fieldset>
-                    </td>
-                </tr>
-                <tr valign="top" class="bg_fs_adjust">
-                    <th scope="row">
                         {{ __('Center Image') }}
                     </th>
                     <td>
-                        <fieldset id="full_screen_center_fs">
+                        <fieldset>
                             <label>
                                 <input type="checkbox" value="1" id="full_screen_center" name="full_screen_center" {% if full_screen_center %}checked="checked"{% endif %} />
                                 <span>{{ __('Enabled') }}</span>
@@ -484,6 +470,48 @@
         <h3>{{ __('Miscellaneous') }}</h3>
         <table class="form-table">
             <tbody>
+                <tr valign="top" class="bg_fs_layout">
+                    <th scope="row">
+                        {{ __('Initial Ease-in') }}
+                    </th>
+                    <td>
+                        <label>
+                            <input type="checkbox" value="1" id="initial_ease_in" name="initial_ease_in" {% if initial_ease_in %}checked="checked"{% endif %} />
+                            <span>{{ __('Enabled') }}</span>
+                            <span class="description">({{ __('Eases in the initial image after it has finished downloading') }})</span>
+                        </label>
+                    </td>
+                </tr>
+
+                <tr valign="top">
+                    <th scope="row">
+                        {{ __('Clickable Backgrounds') }}
+                    </th>
+                    <td>
+                        <label>
+                            <input type="checkbox" value="1" id="bg_click_new_window" name="bg_click_new_window" {% if bg_click_new_window %}checked="checked"{% endif %} />
+                            <span>{{ __('Clicking the background opens the associated link in a new window') }}</span>
+                        </label>
+                    </td>
+                </tr>
+
+                <tr valign="top">
+                    <th scope="row">
+                        {{ __('Track Background Links') }}
+                    </th>
+                    <td>
+                        <label>
+                            <input type="checkbox" value="1" id="bg_track_clicks" name="bg_track_clicks" {% if bg_track_clicks %}checked="checked"{% endif %} />
+                            <span>{{ __('Track background clicks and impressions using Google Analytics.') }}</span>
+                        </label>
+                        <label id="bg_track_clicks_extra">
+                            <span>{{ __('Category name:') }}</span>
+                            <input type="text" id="bg_track_clicks_category "name="bg_track_clicks_category" value="{{ bg_track_clicks_category }}" placeholder="Enter a category name"/>
+                        </label>
+                        <span class="description">({{ __('See Help for details') }})</span>
+                    </td>
+                </tr>
+
                 <tr valign="top">
                     <th scope="row">
                         {{ __('Override Posts and Pages') }}
@@ -510,7 +538,7 @@
             <a href="{{ plugin_home }}" target="_blank">{{plugin_name }} {{ plugin_version }}</a> |
             <a href="#" id="footer_debug_link">{{ __('Debug') }}</a> |
             <a href="http://wordpress.org/extend/plugins/background-manager/" target="_blank">{{ __('Rate It') }}</a> |
-            <a href="http://wordpress.org/tags/background-manager" target="_blank">{{ __('Forum') }}</a> |
+            <a href="http://wordpress.org/support/plugin/background-manager" target="_blank">{{ __('Support') }}</a> |
             <a href="http://pledgie.com/campaigns/16906" target="_blank">{{ __('Donate') }}</a>
         </span>
     </div>
