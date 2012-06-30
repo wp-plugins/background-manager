@@ -6,10 +6,26 @@
  *
  */
 
+
+/* qTip2 overrides */
+.ui-tooltip-titlebar {
+    font-size: 14px !important;
+    line-height: 16px !important;
+}
+
+.ui-tooltip, .qtip {
+    max-width: 350px !important;
+}
+
 .myatu_bgm_fs {
     /* Let CSS decide whether to stretch by width or height (or both) */
     min-width: 100%;
     min-height: 100%;
+    max-width: initial !important;
+    max-height: initial !important;
+    margin: 0;
+    padding: 0;
+    border: 0;
     position: fixed;
     top: 0;
     left: 0;
@@ -47,13 +63,15 @@
 }
 
 .myatu_bgm_info_tab_content {
-    color: #eee;
-    font-size: 10px;
+    color: #333;
+    font-size: 12px;
+    line-height: 14px;
     font-family: "Lucida Grande",Helvetica,Arial,Verdana,sans-serif;
 }
 
 .myatu_bgm_info_tab_content a {
-    color: #aaa;
+    color: #1982D1;
+    text-decoration: none;
 }
 
 .myatu_bgm_info_tab_content img {
@@ -62,19 +80,17 @@
     height: 150px;
     margin-right: 10px;
     margin-bottom: 5px;
-    border: 1px solid #666;
+    border: 1px solid #ddd;
+    padding:4px;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;W
+    -webkit-box-shadow: 2px 2px 4px rgba(0,0,0,0.25);
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.25);
 }
 
-.myatu_bgm_info_tab_content h3 {
-    font-weight: bold;
-    clear: none;
-    text-transform: uppercase;
-    font-size: 140%;
+#myatu_bgm_img_group div {
+    padding: 0;
     margin: 0;
-}
-
-.myatu_bgm_info_tab_desc {
-    margin-right: 10px;
 }
 
 #myatu_bgm_bg_link {
@@ -93,4 +109,10 @@
     z-index: -1999;
 }
 
-
+@media print {
+    .myatu_bgm_fs,
+    #myatu_bgm_pin_it_btn,
+    #myatu_bgm_info_tab {
+        display: none !important;
+    }
+}
