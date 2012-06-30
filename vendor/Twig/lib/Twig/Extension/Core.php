@@ -109,7 +109,6 @@ class Twig_Extension_Core extends Twig_Extension
             new Twig_TokenParser_Spaceless(),
             new Twig_TokenParser_Flush(),
             new Twig_TokenParser_Do(),
-            new Twig_TokenParser_Embed(),
         );
     }
 
@@ -735,11 +734,11 @@ function twig_in_filter($value, $compare)
  *
  * @param Twig_Environment $env        A Twig_Environment instance
  * @param string           $string     The value to be escaped
- * @param string           $strategy   The escaping strategy
+ * @param string           $type       The escaping strategy
  * @param string           $charset    The charset
  * @param Boolean          $autoescape Whether the function is called by the auto-escaping feature (true) or by the developer (false)
  */
-function twig_escape_filter(Twig_Environment $env, $string, $strategy = 'html', $charset = null, $autoescape = false)
+function twig_escape_filter(Twig_Environment $env, $string, $type = 'html', $charset = null, $autoescape = false)
 {
     if ($autoescape && is_object($string) && $string instanceof Twig_Markup) {
         return $string;
@@ -755,7 +754,7 @@ function twig_escape_filter(Twig_Environment $env, $string, $strategy = 'html', 
 
     $string = (string) $string;
 
-    switch ($strategy) {
+    switch ($type) {
         case 'js':
             // escape all non-alphanumeric characters
             // into their \xHH or \uHHHH representations
@@ -778,7 +777,7 @@ function twig_escape_filter(Twig_Environment $env, $string, $strategy = 'html', 
 
             // Using a static variable to avoid initializing the array
             // each time the function is called. Moving the declaration on the
-            // top of the function slow downs other escaping strategies.
+            // top of the function slow downs other escaping types.
             static $htmlspecialcharsCharsets = array(
                 'iso-8859-1' => true, 'iso8859-1' => true,
                 'iso-8859-15' => true, 'iso8859-15' => true,
@@ -806,7 +805,7 @@ function twig_escape_filter(Twig_Environment $env, $string, $strategy = 'html', 
             return twig_convert_encoding($string, $charset, 'UTF-8');
 
         default:
-            throw new Twig_Error_Runtime(sprintf('Invalid escaping strategy "%s" (valid ones: html, js).', $strategy));
+            throw new Twig_Error_Runtime(sprintf('Invalid escape type "%s".', $type));
     }
 }
 
