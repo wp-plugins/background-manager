@@ -3,8 +3,8 @@ Contributors: Myatu
 Donate link: http://pledgie.com/campaigns/16906
 Tags: background, theme, photo, image, rotate, slideshow, random, flickr
 Requires at least: 3.2.1
-Tested up to: 3.4.1
-Stable tag: 1.1.6.1
+Tested up to: 3.4.2
+Stable tag: 1.1.11
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
@@ -89,6 +89,13 @@ with PHP versions older than 5.3.
 3. Editing an Image Set within Background Manager
 
 == Changelog ==
+
+= 1.1.11 (September 12, 2012) =
+* Fixed: Overlay z-index was shared with the background image, causing it not to appear.
+* Fixed: Issue where the background could be overwritten by a sub-class in Normal mode.
+* Fixed: jQuery bug 6724 reporting incorrect window height on iOS devices
+* Changed: Modified handler for browser-cached images, which in FireFox was causing premature transitions.
+* Changed: If both vertical and horizontal stretching is selected in Normal mode, an added CSS filter is added for use for older MSIE browsers (missing 'background-size' support).
 
 = 1.1.6.1 (June 30, 2012) =
 * Fixed: For some themes, the background image group would override screen elements (menus, links) due to missing z-index
@@ -270,7 +277,7 @@ This depends. If you have your very own server, then this is Operating System sp
 
 If you are using a web hosting provider, then you need to contact the provider regarding this. Some can move your website to a different server with a newer version of PHP 5.3, while others make it as simple as adding/changing a line in the `.htaccess` file or a setting in the control panel. For example:
 
-* 1&1 Webhosting: Add `AddType x-mapp-php6 .php` to the `.htaccess` file
+* 1&1 Webhosting: Add `AddHandler x-mapp-php6 .php` to the `.htaccess` file
 * OVH: Add `SetEnv PHP_VER 5_3` or `SetEnv PHP_VER 5_TEST` to the `.htaccess` file
 * GoDaddy Linux Shared Hosting: Add `AddHandler x-httpd-php5-3 .php` to the `.htaccess` file
 * GoDaddy 4GH Hosting: Visit GoDaddy's __Hosting Control Center__ -> __Content__ -> __Programming Languages__

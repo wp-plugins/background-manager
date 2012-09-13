@@ -1204,7 +1204,7 @@ class Main extends \Pf4wp\WordpressPlugin
             $random_image = $this->getImage();
 
             if ($random_image['url'])
-                $style .= sprintf('background-image: url(\'%s\');', $random_image['url']);
+                $style .= sprintf('background-image: url(\'%s\') !important;', $random_image['url']);
 
             // Grab the background position
             if (!$background_position) {
@@ -1213,28 +1213,37 @@ class Main extends \Pf4wp\WordpressPlugin
             }
             $background_position  = explode('-', $background_position);
 
-            $style .= sprintf('background-position: %s %s;', $background_position[0], $background_position[1]);
+            $style .= sprintf('background-position: %s %s !important;', $background_position[0], $background_position[1]);
 
             // Set the background tiling
             $bg_repeats = $this->getBgOptions('repeat');
-            $style .= sprintf('background-repeat: %s;', ($background_repeat) ? $background_repeat : $bg_repeats[0]);
+            $style .= sprintf('background-repeat: %s !important;', ($background_repeat) ? $background_repeat : $bg_repeats[0]);
 
             // Set background scrolling
-            $style .= sprintf('background-attachment: %s;', ($background_scroll) ? $background_scroll : static::BST_SCROLL);
+            $style .= sprintf('background-attachment: %s !important;', ($background_scroll) ? $background_scroll : static::BST_SCROLL);
 
             // Set background sizing (stretching)
             if ($background_stretch_horizontal || $background_stretch_vertical) {
-                $style .= sprintf('background-size: %s %s;',
+                $style .= sprintf('background-size: %s %s !important;',
                     ($background_stretch_horizontal) ? '100%' : 'auto',
                     ($background_stretch_vertical) ? '100%' : 'auto'
                 );
+
+                // MSIE < 9, only if both vertical and horizontal stretching is enabled, and we have a valid bg img
+                if ($background_stretch_horizontal === $background_stretch_vertical && $random_image['url']) {
+                    $ms_filter = sprintf('progid:DXImageTransform.Microsoft.AlphaImageLoader(src=\'%s\',sizingMethod=\'scale\')', $random_image['url']);
+                    $style .= sprintf('filter: %s;-ms-filter: "%1$s";', $ms_filter);
+                }
             }
         } else {
-            $style .= sprintf('background-image: none !important;');
+            $style .= 'background-image: none !important;';
         }
 
-        if ($background_color)
-            $style .= sprintf('background-color: #%s;', $background_color);
+        if ($background_color) {
+            $style .= sprintf('background-color: #%s !important;', $background_color);
+        } else {
+            $style .= 'background-color: transparent !important;';
+        }
 
         if ($style || $custom_styles)
             printf('<style type="text/css" media="screen">body { %s } %s</style>'.PHP_EOL, $style, $custom_styles);
