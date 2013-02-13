@@ -94,7 +94,7 @@ if (typeof myatu_bgm === "undefined") {
          * Event called when the background is clicked
          */
         onBackgroundClick: function(e) {
-            var link = myatu_bgm.current_background.bg_link;
+            var link = myatu_bgm.current_background.bg_link, popup;
 
             if (e.target === this || $(e.target).hasClass('myatu_bgm_fs')) {
                 // Fire custom event function(event, url)
@@ -103,16 +103,15 @@ if (typeof myatu_bgm === "undefined") {
                 // Event tracking for Google Analytics
                 myatu_bgm.doGAEvent('Click');
 
-                // Wait a short moment before actually performing the "click"
-                setTimeout(function() {
-                    if (myatu_bgm.bg_click_new_window === 'true') {
-                        // Open the link in a new window
-                        window.open(link);
-                    } else {
-                        // Open the link in the same window
+                if (myatu_bgm.bg_click_new_window === 'true') {
+                    // Open the link in a new window
+                    window.open(link);
+                } else {
+                    // Open the link in the same window
+                    setTimeout(function() {
                         window.location.assign(link);
-                    }
-                }, 500);
+                    }, 500);
+                }
 
                 return false;
             }
@@ -363,12 +362,17 @@ if (typeof myatu_bgm === "undefined") {
         /**
          * Event called by the timer, switched the background
          */
-        switchBackground: function() {
+        switchBackground: function(override_selection) {
             var is_fullsize  = (myatu_bgm.is_fullsize === 'true')
                 , is_preview    = (myatu_bgm.is_preview  === 'true')
                 , info_tab      = $('#myatu_bgm_info_tab')
                 , cover         = false
                 , transition_speed, active_transition, image_selection, flux_instance;
+
+            // Ensure the timer is cleared (for manual calls)
+            if (myatu_bgm.timer) {
+                clearTimeout(myatu_bgm.timer);
+            }
 
             // Determine if the top image is actually "visible". If not, we simply reset the timer
             if ((is_fullsize && !$('#myatu_bgm_top').is(':visible'))) {
@@ -382,6 +386,12 @@ if (typeof myatu_bgm === "undefined") {
             // Override the method for selecting an image in the preview (Theme Customizer)
             if (is_preview) {
                 image_selection = myatu_bgm.image_selection;
+            }
+
+            // Allow 'overide_selection' to change the image selection method
+            override_selection = override_selection || false;
+            if (override_selection) {
+                image_selection = override_selection;
             }
 
             // Async call
@@ -510,8 +520,8 @@ if (typeof myatu_bgm === "undefined") {
                         }
                     });
                 } else {
-                    // Simply replace the body background
-                    $('body').css('background-image', 'url("' + new_image.url + '")');
+                    // Simply replace the body background - note the use of attr, due to priority flag
+                    $('body').attr('style', 'background-image: url("' + new_image.url + '") !important');
                     myatu_bgm.setTimer();
                 }
 

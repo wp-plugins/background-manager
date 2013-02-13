@@ -3,7 +3,7 @@ Contributors: Myatu
 Donate link: http://pledgie.com/campaigns/16906
 Tags: background, theme, photo, image, rotate, slideshow, random, flickr
 Requires at least: 3.2.1
-Tested up to: 3.4.2
+Tested up to: 3.5.1
 Stable tag: 1.1.11
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -40,7 +40,8 @@ Visit the [Background Manager Demo Site](http://j.mp/bgmdemo) for a live demonst
 * Full control over position for images in normal display mode (tiling, positioning, scrolling and stretching)
 * Optional "Ease in" of a full-screen background image
 * Multiple _Image Sets_ to select a random or sequential image from
-* Override the _Image Set_ for each Post, Page, Custom post type or by Tag(s) or Category
+* Override the _Image Set_ for each Post, Page, Custom post type or by Tag(s) or Category, including
+WP e-Commerce and WooCommerce Product Categories
 * User defined display interval between the background images (timed slideshow)
 * Optional transition effects between the different background images displayed:
     * Fade-in/Fade-out (Crossfade)
@@ -90,12 +91,20 @@ with PHP versions older than 5.3.
 
 == Changelog ==
 
+= 1.2 (February 13, 2013) =
+* __Added__: Support for WooCommerce categories
+* Fixed: Background would always show on search results regardless of user selection.
+* Fixed: Background image would not be replaced in Normal mode, due to a priority flag.
+* Fixed: Issue where background click opening in new browser window was blocked by Chrome.
+* Changed: Modified handler for browser-cached images, as problem still exists in FireFox.
+* Changed: Removed overlay in image set editor, replaced with simple loader to indicate an operation.
+
 = 1.1.11 (September 12, 2012) =
 * Fixed: Overlay z-index was shared with the background image, causing it not to appear.
 * Fixed: Issue where the background could be overwritten by a sub-class in Normal mode.
 * Fixed: jQuery bug 6724 reporting incorrect window height on iOS devices
 * Changed: Modified handler for browser-cached images, which in FireFox was causing premature transitions.
-* Changed: If both vertical and horizontal stretching is selected in Normal mode, an added CSS filter is added for use for older MSIE browsers (missing 'background-size' support).
+* Changed: If both vertical and horizontal stretching is selected in Normal mode, and added CSS filter is added for use for older MSIE browsers (missing 'background-size' support).
 
 = 1.1.6.1 (June 30, 2012) =
 * Fixed: For some themes, the background image group would override screen elements (menus, links) due to missing z-index
@@ -283,3 +292,7 @@ If you are using a web hosting provider, then you need to contact the provider r
 * GoDaddy 4GH Hosting: Visit GoDaddy's __Hosting Control Center__ -> __Content__ -> __Programming Languages__
 * HostGator: Add `Action application/x-hg-php53 /cgi-sys/php53` and `AddHandler application/x-hg-php53 .php` to the `.htaccess` file
 * Bluehost: Add `AddHandler application/x-httpd-php53 .php` to the `.htaccess` file (Note: may require a support request/ticket to enable PHP 5.3)
+
+= How do I translate Background Manager to another language? =
+
+Background Manager uses the same method as WordPress to translate text. A default .PO file has already been created and can be found at `/wp-content/plugins/background-manager/resources/l10n/default.po`. Once you are done editing it, export the .MO file into the same directory, giving it the locale as name. For example: `en_US.mo` for American English, or `en_NL.mo` for Dutch.

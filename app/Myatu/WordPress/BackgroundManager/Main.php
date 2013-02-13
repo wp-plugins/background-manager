@@ -142,6 +142,9 @@ class Main extends \Pf4wp\WordpressPlugin
     /* Enable public-side Ajax - @see onAjaxRequest() */
     public $public_ajax = true;
 
+    /** Disable AJAX verification on public side */
+    public $verify_public_ajax = false;
+
 
     /* ----------- Helpers ----------- */
 
@@ -502,7 +505,7 @@ class Main extends \Pf4wp\WordpressPlugin
             if ($qa = strpos($current_url, '?'))
                 $current_url = substr($current_url, 0, $qa);
 
-            $is_at_door  = (trailingslashit(home_url()) == trailingslashit($current_url));
+            $is_at_door  = (trailingslashit(home_url()) == trailingslashit($current_url)) && !is_search();
 
             $this->np_cache['can_display_background']  = (
                 ($this->options->display_on_front_page  && $is_at_door)     ||
