@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2013 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -18,7 +18,6 @@ use Pf4wp\Menu\StandardMenu;
 use Pf4wp\Menu\MenuEntry;
 use Pf4wp\Widgets\Widget;
 use Pf4wp\Template\NullEngine;
-use Pf4wp\Template\TwigEngine;
 
 /**
  * WordpressPlugin (Pf4wp) provides a base framework to develop plugins for WordPress.
@@ -32,7 +31,7 @@ use Pf4wp\Template\TwigEngine;
  * WordPress: 3.1.0
  *
  * @author Mike Green <myatus@gmail.com>
- * @version 1.0.6.1
+ * @version 1.0.14
  * @package Pf4wp
  * @api
  */
@@ -68,6 +67,9 @@ class WordpressPlugin
      */
     private $menu = false;
 
+    /** Holds data of already called functions, to prevent them being called again (if only allowed once) */
+    private $was_called = array();
+
     /** An object handling the internal options for the plugin
      * @internal
      */
@@ -77,8 +79,9 @@ class WordpressPlugin
      * @internal
      */
     private $default_internal_options = array(
-        'version' => '0.0',             // The version of the plugin, to track upgrade events
-        'delayed_notices' => array(),   // Array containing notices that aren't displayed until possible to show them
+        'version'               => '0.0',           // The version of the plugin, to track upgrade events
+        'delayed_notices'       => array(),         // Array containing notices that aren't displayed until possible to show them
+        'registered_uninstall'  => false,           // Flag to indicate a registration hook has been registered - @since 1.0.14
     );
 
     /**
@@ -87,6 +90,19 @@ class WordpressPlugin
      * @api
      */
     public $template;
+
+    /**
+     * The template engine to use
+     * @api
+     */
+    protected $template_engine = 'Pf4wp\Template\TwigEngine';
+
+    /**
+     * The options to pass to the template engine object upon creation
+     * @since 1.0.9
+     * @api
+     */
+    protected $template_options = array();
 
     /**
      * The options object for the plugin (Options)
@@ -101,6 +117,19 @@ class WordpressPlugin
      * @api
      */
     public $public_ajax = false;
+
+    /**
+     * If the template engine should be intiialised during an AJAX call, this variable is set to `true`
+     * @api
+     */
+    public $ajax_uses_template = false;
+
+    /**
+     * If set to `true`, public AJAX calls will be checked against a provided nonce (default)
+     * @since 1.0.13
+     * @api
+     */
+    public $verify_public_ajax = true;
 
     /**
      * The short name of the plugin
@@ -160,18 +189,25 @@ class WordpressPlugin
         // pre-Initialize the template engine to a `null` engine
         $this->template = new NullEngine();
 
-        // Register uninstall and (de)activation hooks
-        register_activation_hook(plugin_basename($this->plugin_file), array($this, '_onActivation'));
-        register_deactivation_hook(plugin_basename($this->plugin_file), array($this, '_onDeactivation'));
-        register_uninstall_hook(plugin_basename($plugin_file), get_class($this) . '::_onUninstall');
+        if (is_admin()) {
+            // Register (de)activation hooks
+            register_activation_hook(plugin_basename($this->plugin_file), array($this, '_onActivation'));
+            register_deactivation_hook(plugin_basename($this->plugin_file), array($this, '_onDeactivation'));
 
-        // Register an action for when a new blog is created on multisites
-        if (function_exists('is_multisite') && is_multisite())
-            add_action('wpmu_new_blog', array($this, '_onNewBlog'), 10, 1);
+            // Register uninstall hook (@since 1.0.14: added check if already registered, as WP does not do this and only needs to be done once)
+            if (!$this->internal_options->registered_uninstall) {
+                register_uninstall_hook(plugin_basename($plugin_file), get_class($this) . '::_onUninstall');
+                $this->internal_options->registered_uninstall = true;
+            }
 
-        // Widgets get initialized individually (and before WP `init` action) - PITA!
-        if ( !Helpers::isNetworkAdminMode() )
-            add_action('widgets_init', array($this, 'onWidgetRegister'), 10, 0);
+            // Register an action for when a new blog is created on multisites
+            if (function_exists('is_multisite') && is_multisite())
+                add_action('wpmu_new_blog', array($this, '_onNewBlog'), 10, 1);
+
+            // Widgets get initialized individually (and before WP `init` action) - PITA!
+            if ( !Helpers::isNetworkAdminMode() )
+                add_action('widgets_init', array($this, 'onWidgetRegister'), 10, 0);
+        }
     }
 
     /**
@@ -267,17 +303,25 @@ class WordpressPlugin
         if ($this->registered || empty($this->plugin_file))
             return;
 
-        // Load locales
+        // Load locale
         $locale = get_locale();
         if ( !empty($locale) ) {
-            $mofile = $this->getPluginDir() . static::LOCALIZATION_DIR . $locale . '.mo';
+            $mofile_locations = array(
+                $this->getPluginDir() . static::LOCALIZATION_DIR . $locale . '.mo', // Plugin local l10n directory
+                WP_LANG_DIR . '/' . $this->name . '-' . get_locale() . '.mo',       // Global l10n directory
+            );
 
-            if ( @is_file($mofile) && @is_readable($mofile) )
-                load_textdomain($this->name, $mofile);
+            foreach ($mofile_locations as $mofile_location) {
+                if ( @is_file($mofile_location) && @is_readable($mofile_location) ) {
+                    load_textdomain($this->name, $mofile_location);
+                    break;
+                }
+            }
         }
 
         // Plugin events (also in Multisite)
-        add_action('after_plugin_row_' . plugin_basename($this->plugin_file), array($this, '_onAfterPluginText'), 10, 0);
+        if (!Helpers::doingAjax() && is_admin())
+            add_action('after_plugin_row_' . plugin_basename($this->plugin_file), array($this, '_onAfterPluginText'), 10, 0);
 
         // Do not register any actions after this if we're in Network Admin mode (unless override with register_admin_mode)
         if (Helpers::isNetworkAdminMode() && !$this->register_admin_mode) {
@@ -285,34 +329,43 @@ class WordpressPlugin
             return;
         }
 
-        // Template Engine (currently Twig)
-        $views_dir = $this->getPluginDir() . static::VIEWS_DIR;
+        // Template Engine initialization
+        $use_template_engine = (Helpers::doingAjax()) ? $this->ajax_uses_template : true;
+        $views_dir           = $this->getPluginDir() . static::VIEWS_DIR;
+        $template_engine     = false;
 
-        if (@is_dir($views_dir) && @is_readable($views_dir)) {
-            $options = array();
+        if ($use_template_engine) {
+            if (class_exists($this->template_engine)) {
+                $rc = new \ ReflectionClass($this->template_engine);
+                if ($rc->implementsInterface('Pf4wp\Template\EngineInterface'))
+                    $template_engine = $this->template_engine;
+            }
 
-            if (defined('WP_DEBUG') && WP_DEBUG)
-                $options = array_merge($options, array('debug' => true));
+            if ($template_engine && @is_dir($views_dir) && @is_readable($views_dir)) {
+                $options = array('_textdomain' => $this->name);
 
-            if (($cache = StoragePath::validate($this->getPluginDir() . static::VIEWS_CACHE_DIR)) !== false)
-                $options = array_merge($options, array('cache' => $cache));
+                if (defined('WP_DEBUG') && WP_DEBUG)
+                    $options['debug'] = true;
 
-            $this->template = new TwigEngine($views_dir, $options);
+                if (($cache = StoragePath::validate($this->getPluginDir() . static::VIEWS_CACHE_DIR)) !== false)
+                    $options['cache'] = $cache;
 
-            // Add Twig translation extension automatically
-            $translate_extension = new \Pf4wp\Template\Extensions\Twig\Translate();
-            $translate_extension->setTextDomain($this->name);
+                // Replace these options with those specified by the plugin developer, if any
+                $options = array_replace($options, $this->template_options);
 
-            $this->template->getEngine()->addExtension($translate_extension);
+                $this->template = new $template_engine($views_dir, $options);
+            }
         }
 
-        // Internal and Admin events
-        add_action('admin_menu', array($this, '_onAdminRegister'), 10, 0);
-        add_action('wp_dashboard_setup', array($this, 'onDashboardWidgetRegister'), 10, 0);
-        add_action('admin_notices',	array($this, '_onAdminNotices'), 10, 0);
+        if (!Helpers::doingAjax() && is_admin()) {
+            // Internal and Admin events
+            add_action('admin_menu', array($this, '_onAdminRegister'), 10, 0);
+            add_action('wp_dashboard_setup', array($this, 'onDashboardWidgetRegister'), 10, 0);
+            add_action('admin_notices',	array($this, '_onAdminNotices'), 10, 0);
 
-		// Plugin events
-        add_filter('plugin_action_links_' . plugin_basename($this->plugin_file), array($this, '_onPluginActionLinks'), 10, 1);
+            // Plugin events
+            add_filter('plugin_action_links_' . plugin_basename($this->plugin_file), array($this, '_onPluginActionLinks'), 10, 1);
+        }
 
         // Public events
         add_action('parse_request',	array($this, '_onPublicInit'), 10, 0);
@@ -320,36 +373,38 @@ class WordpressPlugin
         // AJAX events
         add_action('wp_ajax_' . $this->name, array($this, '_onAjaxCall'), 10, 0);
         if ($this->public_ajax)
-            add_action('wp_ajax_nopriv_' . $this->name, array($this, '_onAjaxCall'), 10, 0);
+            add_action('wp_ajax_nopriv_' . $this->name, array($this, '_onPublicAjaxCall'), 10, 0);
 
         // Register a final action when WP has been loaded
         add_action('wp_loaded', array($this, '_onWpLoaded'), 10, 0);
 
         $this->onRegisterActions();
 
-        // Check if there are any on-demand filters requested
-        $filters = array();
-        if (isset($_REQUEST['filter']))
-            $filters = explode(',', $_REQUEST['filter']);
+        // Check if there are any on-demand admin filters requested
+        if (is_admin()) {
+            $filters = array();
+            if (isset($_REQUEST['filter']))
+                $filters = explode(',', $_REQUEST['filter']);
 
-        // And check the referer arguments as well if this is a POST request
-        if (!empty($_POST) && isset($_SERVER['HTTP_REFERER'])) {
-            $referer_args = explode('&', ltrim(strstr($_SERVER['HTTP_REFERER'], '?'), '?'));
-            foreach ($referer_args as $referer_arg)
-                if (!empty($referer_arg) && strpos($referer_arg, '=') !== false) {
-                    list($arg_name, $arg_value) = explode('=', $referer_arg);
-                    if ($arg_name == 'filter') {
-                        $filters = array_replace($filters, explode(',', $arg_value));
-                        break;
+            // And check the referer arguments as well if this is a POST request
+            if (!empty($_POST) && isset($_SERVER['HTTP_REFERER'])) {
+                $referer_args = explode('&', ltrim(strstr($_SERVER['HTTP_REFERER'], '?'), '?'));
+                foreach ($referer_args as $referer_arg)
+                    if (!empty($referer_arg) && strpos($referer_arg, '=') !== false) {
+                        list($arg_name, $arg_value) = explode('=', $referer_arg);
+                        if ($arg_name == 'filter') {
+                            $filters = array_replace($filters, explode(',', $arg_value));
+                            break;
+                        }
                     }
-                }
+            }
+
+            // Remove any possible duplicates from filters
+            $filters = array_unique($filters);
+
+            // Fire filter events
+            foreach ($filters as $filter) $this->onFilter($filter);
         }
-
-        // Remove any possible duplicates from filters
-        $filters = array_unique($filters);
-
-        // Fire filter events
-        foreach ($filters as $filter) $this->onFilter($filter);
 
         // Done!
         $this->registered = true;
@@ -364,7 +419,7 @@ class WordpressPlugin
      * @api
      */
     public function __t($string) {
-        return __($string, $this->getName());
+        return __($string, $this->name);
     }
 
     /**
@@ -426,7 +481,7 @@ class WordpressPlugin
     public function getResourceUrl($type = 'js')
     {
         $url     = trailingslashit($this->getPluginUrl() . static::RESOURCES_DIR . $type);
-        $version = PluginInfo::getInfo(true, $this->getPluginBaseName(), 'Version');
+        $version = $this->getVersion();
         $debug   = (defined('WP_DEBUG') && WP_DEBUG) ? '.dev' : '';
 
         return array($url, $version, $debug);
@@ -455,7 +510,7 @@ class WordpressPlugin
      */
     public function getDisplayName()
     {
-        return PluginInfo::getInfo(false, plugin_basename($this->plugin_file), 'Name');
+        return PluginInfo::getDirectPluginInfo($this->plugin_file, 'Name');
     }
 
     /**
@@ -466,7 +521,7 @@ class WordpressPlugin
      */
     public function getVersion()
     {
-        return PluginInfo::getInfo(false, plugin_basename($this->plugin_file), 'Version');
+        return PluginInfo::getDirectPluginInfo($this->plugin_file, 'Version');
     }
 
     /**
@@ -602,7 +657,73 @@ class WordpressPlugin
         $this->internal_options->delayed_notices = array();
     }
 
+    /**
+     * Provides debug information for displaying
+     *
+     * The information is in the array as "Display Name" => "Display Value"
+     *
+     * @since 1.0.10
+     * @api
+     */
+    public function getDebugInfo()
+    {
+        global $wp_version, $wpdb;
+
+        $active_plugins = array();
+        $mem_peak       = (function_exists('memory_get_peak_usage')) ? memory_get_peak_usage() / 1048576 : 0;
+        $mem_usage      = (function_exists('memory_get_usage')) ? memory_get_usage() / 1048576 : 0;
+        $mem_max        = (int) @ini_get('memory_limit');
+        $current_theme  = (function_exists('wp_get_theme')) ? wp_get_theme() : get_current_theme(); // WP 3.4
+
+        foreach (\Pf4wp\Info\PluginInfo::getInfo(true) as $plugin)
+            $active_plugins[] = sprintf("'%s' by %s", $plugin['Name'], $plugin['Author']);
+
+        $result = array(
+            'Generated On'              => gmdate('D, d M Y H:i:s') . ' GMT',
+            $this->getDisplayName() . ' Version' => $this->getVersion(),
+            'PHP Version'               => PHP_VERSION,
+            'Memory Usage'              => sprintf('%.2f MB Peak, %.2f MB Current, %d MB Max permitted by PHP', $mem_peak, $mem_usage, $mem_max),
+            'Available PHP Extensions'  => implode(', ', get_loaded_extensions()),
+            'Pf4wp Version'             => PF4WP_VERSION,
+            'Pf4wp APC Enabled'         => (PF4WP_APC) ? 'Yes' : 'No',
+            'WordPress Version'         => $wp_version,
+            'WordPress Debug Mode'      => (defined('WP_DEBUG') && WP_DEBUG) ? 'Yes' : 'No',
+            'Active WordPress Theme'    => $current_theme,
+            'Active Wordpress Plugins'  => implode(', ', $active_plugins),
+            'Browser'                   => $_SERVER['HTTP_USER_AGENT'],
+            'Server'                    => $_SERVER['SERVER_SOFTWARE'],
+            'Server OS'                 => php_uname(),
+            'Database Version'          => $wpdb->get_var('SELECT VERSION()'),
+        );
+
+        if (is_callable(array($this->template, 'getVersion')) && is_callable(array($this->template, 'getEngineName')))
+            $result['Template Engine Version'] = $this->template->getEngineName()  . ' ' . $this->template->getVersion();
+
+        return $result;
+    }
+
     /*---------- Private Helpers (callbacks have a public scope!) ----------*/
+
+    /**
+     * Checks if a function has been called before
+     *
+     * If not called before, it will set it as called and return false, otherwise returns true
+     *
+     * @return bool
+     * @since 1.0.11
+     */
+    final protected function wasCalled($calling_function)
+    {
+        $calling_function = get_called_class() . '\\' . $calling_function;
+
+        // Called before
+        if (isset($this->was_called[$calling_function]))
+            return true;
+
+        // Not called before
+        $this->was_called[$calling_function] = true;
+        return false;
+    }
 
     /**
      * Inserts (echoes) the AJAX variables
@@ -838,9 +959,6 @@ class WordpressPlugin
      */
     final public function _onAdminRegister()
     {
-        if (!is_admin())
-            return;
-
         // Additional actions to be registered
         $this->onAdminInit();
 
@@ -872,9 +990,6 @@ class WordpressPlugin
      */
     final public function _onAfterPluginText()
     {
-        if (!is_admin())
-            return;
-
         $text = $this->onAfterPluginText();
 
         if ( !empty($text) )
@@ -892,9 +1007,6 @@ class WordpressPlugin
      */
     final public function _onPluginActionLinks($actions)
     {
-        if (!is_admin())
-            return;
-
         $url = $this->getParentMenuUrl();
 
         if ( !is_array($actions) )
@@ -953,9 +1065,6 @@ class WordpressPlugin
      */
     final public function _onAdminNotices()
     {
-        if (!is_admin())
-            return;
-
         $queue = $this->internal_options->delayed_notices;
 
         if (!empty($queue)) {
@@ -974,9 +1083,10 @@ class WordpressPlugin
      * @see onAjaxRequest(), ajaxResponse()
      * @internal
      */
-    final public function _onAjaxCall()
+    final public function _onAjaxCall($verify_ajax = true)
     {
-        check_ajax_referer($this->name . '-ajax-call'); // Dies if the check fails
+        if ($verify_ajax)
+            check_ajax_referer($this->name . '-ajax-call'); // Dies if the check fails
 
         header('Content-type: application/json');
 
@@ -991,6 +1101,20 @@ class WordpressPlugin
     }
 
     /**
+     * Process a public AJAX call
+     *
+     * Note: This will not be called if the admin is logged in, which will use _onAjaxCall instead
+     *
+     * @see onAjaxRequest(), ajaxResponse()
+     * @since 1.0.13
+     * @internal
+     */
+    final public function _onPublicAjaxCall()
+    {
+        $this->_onAjaxCall($this->verify_public_ajax);
+    }
+
+    /**
      * Registers public events
      *
      * @see onPublicScripts(), onPublicStyles(), onPublicLoad()
@@ -998,28 +1122,56 @@ class WordpressPlugin
      */
     final public function _onPublicInit()
     {
-        if (is_admin())
+        if (is_admin() || $this->wasCalled('_onPublicInit'))
             return;
 
         add_action('wp_print_scripts',  array($this, '_onPublicScripts'));
-        add_action('wp_print_styles',   array($this, 'onPublicStyles'));
-        add_action('wp_footer',         array($this, 'onPublicFooter'));
+        add_action('wp_print_styles',   array($this, '_onPublicStyles'));
+        add_action('wp_footer',         array($this, '_onPublicFooter'));
 
         $this->onPublicInit();
     }
 
     /**
-     * Event called public scripts
+     * Event called when to print public scripts
      *
      * @see onPublicScripts()
      * @internal
      */
     final public function _onPublicScripts()
     {
+        if ($this->wasCalled('_onPublicScripts')) return; // Can only be called once!
+
         if ($this->public_ajax)
             $this->insertAjaxVars();
 
         $this->onPublicScripts();
+    }
+
+    /**
+     * Event called when to print public styles
+     *
+     * @see onPublicStyles()
+     * @internal
+     */
+    final public function _onPublicStyles()
+    {
+        if ($this->wasCalled('_onPublicStyles')) return; // Can only be called once!
+
+        $this->onPublicStyles();
+    }
+
+    /**
+     * Event called when ready to print public footer
+     *
+     * @see onPublicFooter()
+     * @internal
+     */
+    final public function _onPublicFooter()
+    {
+        if ($this->wasCalled('_onPublicFooter')) return; // Can only be called once!
+
+        $this->onPublicFooter();
     }
 
     /**

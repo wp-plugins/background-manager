@@ -76,9 +76,10 @@ if (($_pf4wp_old_php = version_compare(PHP_VERSION, $_pf4wp_version_check_php, '
         // Gracefully "die", letting the end user know why this happened
         wp_die(
             sprintf(
-                '<h1>Error: Unsupported version</h1><p><strong>The plugin %s requires %s or better.</strong></p>%s<p>Error source: <code>%s</code></p>',
+                '<h1>Error: Unsupported version</h1><p><strong>The plugin %s requires %s or better, but version %s was detected.</strong></p>%s<p>Error source: <code>%s</code></p>',
                 $_pf4wp_plugin_name,
                 ($_pf4wp_old_php) ? 'PHP version ' . $_pf4wp_version_check_php : 'WordPress version ' . $_pf4wp_version_check_wp,
+                ($_pf4wp_old_php) ? PHP_VERSION : $wp_version,
                 $_pf4wp_deactivated,
                 $_pf4wp_file
             ),
@@ -131,4 +132,4 @@ $_pf4wp_check_pass = true;
 
 // Set the version
 if (!defined('PF4WP_VERSION'))
-    define('PF4WP_VERSION', '1.0.7');
+    define('PF4WP_VERSION', '1.0.14');
