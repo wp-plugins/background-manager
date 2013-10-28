@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2013 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -80,7 +80,7 @@ abstract class Options
      */
     public function _invalidateCache($option = null)
     {
-        if (is_null($option)) {
+        if ($option === null) {
             $this->cache        = array();
             $this->filter_cache = array();
         } else {
@@ -124,10 +124,14 @@ abstract class Options
 
                 // Ensure nested arrays are the same as the default
                 $result = $this->array_replace_nested($default, $result);
-            } else if (is_null($result)) {
+            } else if ($result === null) {
                 $result = $this->defaults[$option];
             }
         }
+
+        // Strip any slashes from the result value - @since 1.0.10
+        if (is_string($result))
+            $result = stripslashes($result);
 
         // Store into cache
         $this->cache[$option] = $result;
@@ -148,7 +152,7 @@ abstract class Options
     {
         $options = $this->get();
 
-        if (is_null($value)) {
+        if ($value === null) {
             unset($options[$option]);
         } else {
             $options[$option] = $value;
@@ -157,6 +161,26 @@ abstract class Options
         $this->_invalidateCache($option);
 
         $this->set($options);
+    }
+
+    /**
+     * Isset magic for options
+     *
+     * @api
+     * @since 1.0.10
+     */
+    public function __isset($option) {
+        return ($this->__get($option) !== null);
+    }
+
+    /**
+     * Unset magic for options
+     *
+     * @api
+     * @since 1.0.10
+     */
+    public function __unset($option) {
+        $this->__set($option, null);
     }
 
     /**
@@ -392,8 +416,12 @@ abstract class Options
             if ((array)$default_value === $default_value) {
                 if ((int)$default_key === $default_key) {
                     // If indexed (multiple entries), ensure each entry has the same default values
-                    foreach ($result as $result_key => $result_value)
+                    foreach ($result as $result_key => $result_value) {
+                        if (is_string($result_value))
+                            $result_value = stripslashes($result_value); // @since 1.0.10
+
                         $result[$result_key] = $this->array_replace_nested($default_value, $result_value);
+                    }
                 } else {
                     $result[$default_key] = $this->array_replace_nested($default_value, $result[$default_key]);
                 }
