@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2013 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -80,7 +80,7 @@ abstract class Options
      */
     public function _invalidateCache($option = null)
     {
-        if (is_null($option)) {
+        if ($option === null) {
             $this->cache        = array();
             $this->filter_cache = array();
         } else {
@@ -124,7 +124,7 @@ abstract class Options
 
                 // Ensure nested arrays are the same as the default
                 $result = $this->array_replace_nested($default, $result);
-            } else if (is_null($result)) {
+            } else if ($result === null) {
                 $result = $this->defaults[$option];
             }
         }
@@ -152,7 +152,7 @@ abstract class Options
     {
         $options = $this->get();
 
-        if (is_null($value)) {
+        if ($value === null) {
             unset($options[$option]);
         } else {
             $options[$option] = $value;
@@ -170,7 +170,7 @@ abstract class Options
      * @since 1.0.10
      */
     public function __isset($option) {
-        return !is_null($this->__get($option));
+        return ($this->__get($option) !== null);
     }
 
     /**

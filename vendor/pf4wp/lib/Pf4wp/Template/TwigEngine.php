@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2013 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -41,7 +41,7 @@ class TwigEngine implements EngineInterface
      */
     public function __construct($template_path, array $options)
     {
-        if (class_exists('\Twig_Autoloader')) {
+        if (class_exists('\\Twig_Autoloader')) {
             \Twig_Autoloader::register();
 
             $this->options = $options;
