@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2013 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -10,6 +10,8 @@
 namespace Pf4wp;
 
 use Pf4wp\Common\Helpers;
+use Pf4wp\Common\InternalImages;
+use Pf4wp\Arrays\GlobalArrayObject;
 use Pf4wp\Info\PluginInfo;
 use Pf4wp\Storage\StoragePath;
 use Pf4wp\Notification\AdminNotice;
@@ -18,7 +20,7 @@ use Pf4wp\Menu\StandardMenu;
 use Pf4wp\Menu\MenuEntry;
 use Pf4wp\Widgets\Widget;
 use Pf4wp\Template\NullEngine;
-use Pf4wp\Template\TwigEngine;
+
 
 /**
  * WordpressPlugin (Pf4wp) provides a base framework to develop plugins for WordPress.
@@ -32,7 +34,7 @@ use Pf4wp\Template\TwigEngine;
  * WordPress: 3.1.0
  *
  * @author Mike Green <myatus@gmail.com>
- * @version 1.0.6.1
+ * @version 1.0.14
  * @package Pf4wp
  * @api
  */
@@ -43,10 +45,22 @@ class WordpressPlugin
     const VIEWS_DIR        = 'resources/views/';
     const VIEWS_CACHE_DIR  = 'store/cache/views/';
 
+    // Available log levels
+    const LOG_DISABLED = 0;
+    const LOG_ERROR    = 1;
+    const LOG_WARNING  = 2;
+    const LOG_DEBUG    = 3;
+    const LOG_PROFILE  = 4;
+
     /** Instance container
      * @internal
      */
     private static $instances = array();
+
+    /** Whether the shutdown function has been registered
+     * @internal
+     */
+    private static $registered_shutdown = false;
 
     /** Whether the plugin has been registered with WordPress
      * @internal
@@ -68,6 +82,24 @@ class WordpressPlugin
      */
     private $menu = false;
 
+    /** Holds data of already called functions, to prevent them being called again (if only allowed once)
+     * @internal
+     */
+    private $was_called = array();
+
+    /** Holds any JS code to be printed between script tags
+     * @since 1.1
+     * @internal
+     */
+    private $js_code = array();
+
+    /**
+     * Holds private globals
+     * @since 1.1
+     * @internal
+     */
+    protected $globals;
+
     /** An object handling the internal options for the plugin
      * @internal
      */
@@ -77,8 +109,10 @@ class WordpressPlugin
      * @internal
      */
     private $default_internal_options = array(
-        'version' => '0.0',             // The version of the plugin, to track upgrade events
-        'delayed_notices' => array(),   // Array containing notices that aren't displayed until possible to show them
+        'version'               => '0.0',           // The version of the plugin, to track upgrade events
+        'delayed_notices'       => array(),         // Array containing notices that aren't displayed until possible to show them
+        'registered_uninstall'  => false,           // Flag to indicate a registration hook has been registered - @since 1.0.14
+        'remote_js_console'     => false,           // Indicates if remote JS console is disabled, or the UUID if enabled
     );
 
     /**
@@ -87,6 +121,19 @@ class WordpressPlugin
      * @api
      */
     public $template;
+
+    /**
+     * The template engine to use
+     * @api
+     */
+    protected $template_engine = 'Pf4wp\Template\TwigEngine';
+
+    /**
+     * The options to pass to the template engine object upon creation
+     * @since 1.0.9
+     * @api
+     */
+    protected $template_options = array();
 
     /**
      * The options object for the plugin (Options)
@@ -101,6 +148,19 @@ class WordpressPlugin
      * @api
      */
     public $public_ajax = false;
+
+    /**
+     * If the template engine should be intiialised during an AJAX call, this variable is set to `true`
+     * @api
+     */
+    public $ajax_uses_template = false;
+
+    /**
+     * If set to `true`, public AJAX calls will be checked against a provided nonce (default)
+     * @since 1.0.13
+     * @api
+     */
+    public $verify_public_ajax = true;
 
     /**
      * The short name of the plugin
@@ -121,6 +181,23 @@ class WordpressPlugin
      * @api
      */
     protected $default_options = array();
+
+    /**
+     * Flag to check if a locale has been loaded
+     * @since 1.0.16
+     * @api
+     */
+    protected $locale_loaded = false;
+
+    /**
+     * Default log level
+     *
+     * If set to zero, no log messages will be recorded (not recommended)
+     *
+     * @since 1.1
+     * @api
+     */
+    public $log_level = self::LOG_ERROR;
 
     /**
      * Constructor (Protected; use instance())
@@ -153,6 +230,16 @@ class WordpressPlugin
             }
         }
 
+        // Globals
+        $this->globals = new GlobalArrayObject();
+
+        // Register the shutdown function, if it hasn't been yet
+        if (!self::$registered_shutdown) {
+            register_shutdown_function(array($this, '_onShutdown'));
+
+            self::$registered_shutdown = true;
+        }
+
         // Options handlers
         $this->options = new WordpressOptions($this->name, $this->default_options);
         $this->internal_options = new WordpressOptions('_' . $this->name, $this->default_internal_options); // Internal
@@ -160,18 +247,25 @@ class WordpressPlugin
         // pre-Initialize the template engine to a `null` engine
         $this->template = new NullEngine();
 
-        // Register uninstall and (de)activation hooks
-        register_activation_hook(plugin_basename($this->plugin_file), array($this, '_onActivation'));
-        register_deactivation_hook(plugin_basename($this->plugin_file), array($this, '_onDeactivation'));
-        register_uninstall_hook(plugin_basename($plugin_file), get_class($this) . '::_onUninstall');
+        if (is_admin()) {
+            // Register (de)activation hooks
+            register_activation_hook(plugin_basename($this->plugin_file), array($this, '_onActivation'));
+            register_deactivation_hook(plugin_basename($this->plugin_file), array($this, '_onDeactivation'));
 
-        // Register an action for when a new blog is created on multisites
-        if (function_exists('is_multisite') && is_multisite())
-            add_action('wpmu_new_blog', array($this, '_onNewBlog'), 10, 1);
+            // Register uninstall hook (@since 1.0.14: added check if already registered, as WP does not do this and only needs to be done once)
+            if (!$this->internal_options->registered_uninstall) {
+                register_uninstall_hook(plugin_basename($plugin_file), get_class($this) . '::_onUninstall');
+                $this->internal_options->registered_uninstall = true;
+            }
 
-        // Widgets get initialized individually (and before WP `init` action) - PITA!
-        if ( !Helpers::isNetworkAdminMode() )
-            add_action('widgets_init', array($this, 'onWidgetRegister'), 10, 0);
+            // Register an action for when a new blog is created on multisites
+            if (function_exists('is_multisite') && is_multisite())
+                add_action('wpmu_new_blog', array($this, '_onNewBlog'), 10, 1);
+
+            // Widgets get initialized individually (and before WP `init` action) - PITA!
+            if ( !Helpers::isNetworkAdminMode() )
+                add_action('widgets_init', array($this, 'onWidgetRegister'), 10, 0);
+        }
     }
 
     /**
@@ -179,7 +273,11 @@ class WordpressPlugin
      */
     public function __destruct()
     {
+        // Restore the 2nd stage exception handler
         restore_exception_handler();
+
+        // Remove ourselves from the loaded instances
+        unset(self::$instances[get_class($this)]);
     }
 
     /*---------- Helpers ----------*/
@@ -267,17 +365,26 @@ class WordpressPlugin
         if ($this->registered || empty($this->plugin_file))
             return;
 
-        // Load locales
+        // Load locale
         $locale = get_locale();
         if ( !empty($locale) ) {
-            $mofile = $this->getPluginDir() . static::LOCALIZATION_DIR . $locale . '.mo';
+            $mofile_locations = array(
+                $this->getPluginDir() . static::LOCALIZATION_DIR . $locale . '.mo', // Plugin local l10n directory
+                WP_LANG_DIR . '/' . $this->name . '-' . get_locale() . '.mo',       // Global l10n directory
+            );
 
-            if ( @is_file($mofile) && @is_readable($mofile) )
-                load_textdomain($this->name, $mofile);
+            foreach ($mofile_locations as $mofile_location) {
+                if ( @is_file($mofile_location) && @is_readable($mofile_location) ) {
+                    load_textdomain($this->name, $mofile_location);
+                    $this->locale_loaded = true;
+                    break;
+                }
+            }
         }
 
         // Plugin events (also in Multisite)
-        add_action('after_plugin_row_' . plugin_basename($this->plugin_file), array($this, '_onAfterPluginText'), 10, 0);
+        if (!Helpers::doingAjax() && is_admin())
+            add_action('after_plugin_row_' . plugin_basename($this->plugin_file), array($this, '_onAfterPluginText'), 10, 0);
 
         // Do not register any actions after this if we're in Network Admin mode (unless override with register_admin_mode)
         if (Helpers::isNetworkAdminMode() && !$this->register_admin_mode) {
@@ -285,34 +392,47 @@ class WordpressPlugin
             return;
         }
 
-        // Template Engine (currently Twig)
-        $views_dir = $this->getPluginDir() . static::VIEWS_DIR;
+        // Template Engine initialization
+        $use_template_engine = (Helpers::doingAjax()) ? $this->ajax_uses_template : true;
+        $views_dir           = $this->getPluginDir() . static::VIEWS_DIR;
+        $template_engine     = false;
 
-        if (@is_dir($views_dir) && @is_readable($views_dir)) {
-            $options = array();
+        if ($use_template_engine) {
+            if (class_exists($this->template_engine)) {
+                $rc = new \ReflectionClass($this->template_engine);
+                if ($rc->implementsInterface('Pf4wp\Template\EngineInterface'))
+                    $template_engine = $this->template_engine;
+            }
 
-            if (defined('WP_DEBUG') && WP_DEBUG)
-                $options = array_merge($options, array('debug' => true));
+            if ($template_engine && @is_dir($views_dir) && @is_readable($views_dir)) {
+                $options = array('_textdomain' => $this->name);
 
-            if (($cache = StoragePath::validate($this->getPluginDir() . static::VIEWS_CACHE_DIR)) !== false)
-                $options = array_merge($options, array('cache' => $cache));
+                if (defined('WP_DEBUG') && WP_DEBUG)
+                    $options['debug'] = true;
 
-            $this->template = new TwigEngine($views_dir, $options);
+                if (($cache = StoragePath::validate($this->getPluginDir() . static::VIEWS_CACHE_DIR)) !== false)
+                    $options['cache'] = $cache;
 
-            // Add Twig translation extension automatically
-            $translate_extension = new \Pf4wp\Template\Extensions\Twig\Translate();
-            $translate_extension->setTextDomain($this->name);
+                // Replace these options with those specified by the plugin developer, if any
+                $options = array_replace($options, $this->template_options);
 
-            $this->template->getEngine()->addExtension($translate_extension);
+                $this->template = new $template_engine($views_dir, $options);
+            }
         }
 
-        // Internal and Admin events
-        add_action('admin_menu', array($this, '_onAdminRegister'), 10, 0);
-        add_action('wp_dashboard_setup', array($this, 'onDashboardWidgetRegister'), 10, 0);
-        add_action('admin_notices',	array($this, '_onAdminNotices'), 10, 0);
+        // Set JS console define, if ours
+        if (!defined('PF4WP_JS_CONSOLE') && $this->internal_options->remote_js_console)
+            define('PF4WP_JS_CONSOLE', $this->internal_options->remote_js_console);
 
-		// Plugin events
-        add_filter('plugin_action_links_' . plugin_basename($this->plugin_file), array($this, '_onPluginActionLinks'), 10, 1);
+        if (!Helpers::doingAjax() && is_admin()) {
+            // Internal and Admin events
+            add_action('admin_menu', array($this, '_onAdminRegister'), 10, 0);
+            add_action('wp_dashboard_setup', array($this, 'onDashboardWidgetRegister'), 10, 0);
+            add_action('admin_notices',	array($this, '_onAdminNotices'), 10, 0);
+
+            // Plugin events
+            add_filter('plugin_action_links_' . plugin_basename($this->plugin_file), array($this, '_onPluginActionLinks'), 10, 1);
+        }
 
         // Public events
         add_action('parse_request',	array($this, '_onPublicInit'), 10, 0);
@@ -320,36 +440,38 @@ class WordpressPlugin
         // AJAX events
         add_action('wp_ajax_' . $this->name, array($this, '_onAjaxCall'), 10, 0);
         if ($this->public_ajax)
-            add_action('wp_ajax_nopriv_' . $this->name, array($this, '_onAjaxCall'), 10, 0);
+            add_action('wp_ajax_nopriv_' . $this->name, array($this, '_onPublicAjaxCall'), 10, 0);
 
         // Register a final action when WP has been loaded
         add_action('wp_loaded', array($this, '_onWpLoaded'), 10, 0);
 
         $this->onRegisterActions();
 
-        // Check if there are any on-demand filters requested
-        $filters = array();
-        if (isset($_REQUEST['filter']))
-            $filters = explode(',', $_REQUEST['filter']);
+        // Check if there are any on-demand admin filters requested
+        if (is_admin()) {
+            $filters = array();
+            if (isset($_REQUEST['filter']))
+                $filters = explode(',', $_REQUEST['filter']);
 
-        // And check the referer arguments as well if this is a POST request
-        if (!empty($_POST) && isset($_SERVER['HTTP_REFERER'])) {
-            $referer_args = explode('&', ltrim(strstr($_SERVER['HTTP_REFERER'], '?'), '?'));
-            foreach ($referer_args as $referer_arg)
-                if (!empty($referer_arg) && strpos($referer_arg, '=') !== false) {
-                    list($arg_name, $arg_value) = explode('=', $referer_arg);
-                    if ($arg_name == 'filter') {
-                        $filters = array_replace($filters, explode(',', $arg_value));
-                        break;
+            // And check the referer arguments as well if this is a POST request
+            if (!empty($_POST) && isset($_SERVER['HTTP_REFERER'])) {
+                $referer_args = explode('&', ltrim(strstr($_SERVER['HTTP_REFERER'], '?'), '?'));
+                foreach ($referer_args as $referer_arg)
+                    if (!empty($referer_arg) && strpos($referer_arg, '=') !== false) {
+                        list($arg_name, $arg_value) = explode('=', $referer_arg);
+                        if ($arg_name == 'filter') {
+                            $filters = array_replace($filters, explode(',', $arg_value));
+                            break;
+                        }
                     }
-                }
+            }
+
+            // Remove any possible duplicates from filters
+            $filters = array_unique($filters);
+
+            // Fire filter events
+            foreach ($filters as $filter) $this->onFilter($filter);
         }
-
-        // Remove any possible duplicates from filters
-        $filters = array_unique($filters);
-
-        // Fire filter events
-        foreach ($filters as $filter) $this->onFilter($filter);
 
         // Done!
         $this->registered = true;
@@ -364,7 +486,7 @@ class WordpressPlugin
      * @api
      */
     public function __t($string) {
-        return __($string, $this->getName());
+        return __($string, $this->name);
     }
 
     /**
@@ -373,7 +495,7 @@ class WordpressPlugin
      * @return string Plugin working name
      * @api
      */
-    public function getName()
+    final public function getName()
     {
         return $this->name;
     }
@@ -384,7 +506,7 @@ class WordpressPlugin
      * @return string Plugin directory (always with trailing slash)
      * @api
      */
-    public function getPluginDir()
+    final public function getPluginDir()
     {
         return trailingslashit(dirname($this->plugin_file));
     }
@@ -395,7 +517,7 @@ class WordpressPlugin
      * @return string Plugin base name
      * @api
      */
-    public function getPluginBaseName()
+    final public function getPluginBaseName()
     {
         return plugin_basename($this->plugin_file);
     }
@@ -407,7 +529,7 @@ class WordpressPlugin
      * @return string Plugin URL
      * @api
      */
-    public function getPluginUrl($full = false)
+    final public function getPluginUrl($full = false)
     {
         if ($full)
             return WP_PLUGIN_URL . '/' . plugin_basename($this->plugin_file);
@@ -426,7 +548,7 @@ class WordpressPlugin
     public function getResourceUrl($type = 'js')
     {
         $url     = trailingslashit($this->getPluginUrl() . static::RESOURCES_DIR . $type);
-        $version = PluginInfo::getInfo(true, $this->getPluginBaseName(), 'Version');
+        $version = $this->getVersion();
         $debug   = (defined('WP_DEBUG') && WP_DEBUG) ? '.dev' : '';
 
         return array($url, $version, $debug);
@@ -455,7 +577,7 @@ class WordpressPlugin
      */
     public function getDisplayName()
     {
-        return PluginInfo::getInfo(false, plugin_basename($this->plugin_file), 'Name');
+        return PluginInfo::getDirectPluginInfo($this->plugin_file, 'Name');
     }
 
     /**
@@ -466,7 +588,7 @@ class WordpressPlugin
      */
     public function getVersion()
     {
-        return PluginInfo::getInfo(false, plugin_basename($this->plugin_file), 'Version');
+        return PluginInfo::getDirectPluginInfo($this->plugin_file, 'Version');
     }
 
     /**
@@ -481,6 +603,98 @@ class WordpressPlugin
             return $this->menu;
 
         return false;
+    }
+
+    /**
+     * Sets the log level
+     *
+     * A level of LOG_DISABLED (0) disables logging. It is recommended to
+     * have the minimum set at LOG_ERROR (1), so to record fatal errors and
+     * uncaught exceptions.
+     *
+     * It is permissible to set $log_level directly
+     *
+     * @param int $level The new log level
+     * @return int The previous log level
+     * @since 1.1
+     * @api
+     */
+    public function setLogLevel($level)
+    {
+        $previous = $this->log_level;
+
+        $this->log_level = ($level < self::LOG_DISABLED) ? self::LOG_DISABLED : $level;
+
+        return $previous;
+    }
+
+    /**
+     * Returns the current log level
+     *
+     * Note: It is permissible to set $log_level directly
+     *
+     * @return int
+     * @since 1.1
+     * @api
+     */
+    public function getLogLevel()
+    {
+        return $this->log_level;
+    }
+
+    /**
+     * Returns the location of the log file
+     *
+     * @return string
+     * @since 1.1
+     * @api
+     */
+    public function getLogFile()
+    {
+        $fn = preg_replace('#[^\w\s\d\-_~,;:\[\]\(\]]|[\.]{2,}#', '', $this->getName());
+
+        return $this->getPluginDir() . $fn . '.log';
+    }
+
+    /**
+     * Logs an entry, depending on the log level
+     *
+     * @param string $entry The log entry to record
+     * @param int $level The log level of the entry (LOG_ERROR by default)
+     * @return int Returns 1 if the entry was logged successfully, 0 if unsuccessful or -1 if log level is higher than specified log level
+     * @since 1.1
+     * @api
+     */
+    final public function log($entry, $level = self::LOG_ERROR)
+    {
+        // Do not log this entry if the level is higher than the specified log level
+        if ($level > $this->log_level)
+            return -1;
+
+        // Set a marker, so we know what type of log level/entry this is
+        switch ($level) {
+            case self::LOG_ERROR:   $log_marker = 'E'; break;
+            case self::LOG_WARNING: $log_marker = 'W'; break;
+            case self::LOG_DEBUG:   $log_marker = 'D'; break;
+            case self::LOG_PROFILE: $log_marker = 'P'; break;
+            default:                $log_marker = '-'; break;
+        }
+
+        // Log it
+        $result = (@file_put_contents(
+            $this->getLogFile(),
+            sprintf(
+                "%s %s \"%s v%s\" %s\n",
+                date(c),
+                $log_marker,
+                addslashes($this->getDisplayName()),
+                $this->getVersion(),
+                $entry
+            ),
+            FILE_APPEND
+        ) > 0);
+
+        return ($result) ? 1 : 0;
     }
 
     /**
@@ -602,7 +816,250 @@ class WordpressPlugin
         $this->internal_options->delayed_notices = array();
     }
 
+    /**
+     * Provides debug information for displaying
+     *
+     * The information is in the array as "Display Name" => "Display Value"
+     *
+     * @since 1.0.10
+     * @api
+     */
+    public function getDebugInfo()
+    {
+        global $wp_version, $wpdb, $wp_object_cache;
+
+        $mem_peak        = (function_exists('memory_get_peak_usage')) ? memory_get_peak_usage() / 1048576 : 0;
+        $mem_usage       = (function_exists('memory_get_usage')) ? memory_get_usage() / 1048576 : 0;
+        $mem_max         = (int) @ini_get('memory_limit');
+        $mem_max_wp      = (defined('WP_MEMORY_LIMIT')) ? WP_MEMORY_LIMIT : 0;
+        $upload_max      = (int) @ini_get('upload_max_filesize');
+        $upload_max_post = (int) @ini_get('post_max_size');
+        $upload_max_wp   = (function_exists('wp_max_upload_size')) ? wp_max_upload_size() / 1048576 : 0;
+        $current_theme   = (function_exists('wp_get_theme')) ? wp_get_theme() : get_current_theme(); // WP 3.4
+
+        // Determine Object Cache
+        $obj_cache_class      = get_class($wp_object_cache);
+        $obj_cache_class_vars = get_class_vars($obj_cache_class);
+        $obj_cache            = sprintf('Unknown (%s)', $obj_cache_class);
+
+        if ($obj_cache_class == 'APC_Object_Cache') {
+            $obj_cache = 'APC Object Cache';
+        } else if ($obj_cache_class == 'W3_ObjectCacheBridge') {
+            $obj_cache = 'W3 Total Cache';
+        } else if (array_key_exists('mc', $obj_cache_class_vars)) {
+            $obj_cache = 'Memcache Object Cache';
+        } else if (array_key_exists('global_groups', $obj_cache_class_vars)) {
+            $obj_cache = 'WordPress Default';
+        }
+
+        // Sort PHP extensions alphabetically
+        $php_extensions = get_loaded_extensions();
+        usort($php_extensions, 'strcasecmp');
+
+        // Fill active plugins array
+        $active_plugins  = array();
+        foreach (\Pf4wp\Info\PluginInfo::getInfo(true) as $plugin)
+            $active_plugins[] = sprintf("'%s' by %s, version %s", $plugin['Name'], $plugin['Author'], $plugin['Version']);
+
+        $result = array(
+            'Generated On'              => gmdate('D, d M Y H:i:s') . ' GMT',
+            $this->getDisplayName() . ' Version' => $this->getVersion(),
+
+            /* Memory/Uploads Limits */
+            'Memory'                    => null,
+            'Memory Usage'              => sprintf('%.2f Mbytes peak, %.2f Mbytes current', $mem_peak, $mem_usage),
+            'Memory Limits'             => sprintf('WordPress: %d Mbytes - PHP: %d Mbytes', $mem_max_wp, $mem_max),
+            'Upload Limits'             => sprintf('WordPress: %d Mbytes - PHP: %d Mbytes filesize (%d Mbytes POST size)', $upload_max_wp, $upload_max, $upload_max_post),
+
+            /* WordPress */
+            'WordPress'                 => null,
+            'WordPress Version'         => $wp_version,
+            'Active Wordpress Plugins'  => implode('; ', $active_plugins),
+            'Active WordPress Theme'    => $current_theme,
+            'Locale'                    => sprintf('%s (%s)', get_locale(), ($this->locale_loaded) ? 'Loaded' : 'Not Loaded'),
+            'Debug Mode'                => (defined('WP_DEBUG') && WP_DEBUG) ? 'Yes' : 'No',
+            'Object Cache'              => $obj_cache,
+            'Home URL'                  => home_url(),
+            'Site URL'                  => site_url(),
+
+            /* PHP */
+            'PHP'                       => null,
+            'PHP Version'               => PHP_VERSION,
+            'Available PHP Extensions'  => implode(', ', $php_extensions),
+
+            /* Server / Client Environment */
+            'Server/Client Environment' => null,
+            'Browser'                   => $_SERVER['HTTP_USER_AGENT'],
+            'Server Software'           => $_SERVER['SERVER_SOFTWARE'],
+            'Server OS'                 => php_uname(),
+            'Server Load'               => (function_exists('sys_getloadavg')) ? @implode(', ', sys_getloadavg()) : 'Unavailable',
+            'Database Version'          => $wpdb->get_var('SELECT VERSION()'),
+
+            /* pf4wp */
+            'pf4wp'                     => null,
+            'pf4wp Version'             => PF4WP_VERSION,
+            'pf4wp APC Enabled'         => (defined('PF4WP_APC') && PF4WP_APC === true) ? 'Yes' : 'No',
+            'Remote JS Console Enabled' => ($uuid = $this->getRemoteJSConsole()) ? sprintf('Yes - UUID %s (%s by this plugin)', $uuid, ($this->isRemoteJSConsoleOwned() ? 'Owned' : 'Not owned')) : 'No',
+            'Template Cache Directory'  => is_writable($this->getPluginDir() . static::VIEWS_CACHE_DIR) ? 'Writeable' : 'Not Writeable',
+        );
+
+        if (is_callable(array($this->template, 'getVersion')) && is_callable(array($this->template, 'getEngineName')))
+            $result['Template Engine Version'] = $this->template->getEngineName()  . ' ' . $this->template->getVersion();
+
+        return $result;
+    }
+
+    /**
+     * Adds JS code to a queue to be printed within a single `<script>` tag
+     *
+     * @param string $js The Javascript, without any script tags
+     * @since 1.1
+     * @api
+     */
+    public function addJSQueue($js)
+    {
+        $this->js_code[] = $js;
+    }
+
+    /**
+     * Retrieves the current queue of JS code to be printed
+     *
+     * @return array Array containing the Javascript in the order it was added
+     * @since 1.1
+     * @api
+     */
+    public function getJSQueue()
+    {
+        return $this->js_code;
+    }
+
+    /**
+     * Enables or disables remote JS console
+     *
+     * Read more at http://jsconsole.com/remote-debugging.html
+     *
+     * @since 1.0.18
+     * @param bool $enable If set to true, the remote JS console will be enabled, otherwise disabled.
+     * @return mixed Returns the UUID if enabled, true if disabled or false if unable to enable (non-owner)
+     * @api
+     */
+    public function setRemoteJSConsole($enable)
+    {
+        $uuid = $this->getRemoteJSConsole();
+
+        // Check if we own it if enabled
+        if ($uuid && !$this->isRemoteJSConsoleOwned()) {
+            // Already enabled, but not owned by us
+            return false;
+        }
+
+        // Enable it
+        if ($enable === true) {
+            // If not already enabled, do it now
+            if (!$uuid) {
+                $uuid = $this->internal_options->remote_js_console = Helpers::UUID();
+                if (!defined('PF4WP_JS_CONSOLE'))
+                    define('PF4WP_JS_CONSOLE', $uuid);
+            }
+
+            return $uuid;
+        }
+
+        // Disable it
+        return (($this->internal_options->remote_js_console = false) === false);
+
+    }
+
+    /**
+     * Returns if the remote JS console is enabled
+     *
+     * @since 1.0.18
+     * @return mixed Returns the UUID if enabled, or false if disabled
+     * @api
+     */
+    public function getRemoteJSConsole()
+    {
+        return (defined('PF4WP_JS_CONSOLE')) ? PF4WP_JS_CONSOLE : $this->internal_options->remote_js_console;
+    }
+
+    /**
+     * Returns if the remote JS console is owned by this plugin
+     *
+     * @since 1.0.18
+     * @return bool
+     * @api
+     */
+    public function isRemoteJSConsoleOwned()
+    {
+        return (defined('PF4WP_JS_CONSOLE') && PF4WP_JS_CONSOLE === $this->internal_options->remote_js_console);
+    }
+
+    /**
+     * Returns the URL to start a JS console session
+     *
+     * @since 1.0.18
+     * @param mixed $html If a string is provided, then this function returns a HTML link with the specified text.
+     *   If set to true, the UUID will be used as the link text.
+     * @return mixed The URL for the session, or false if not enabled
+     * @api
+     */
+    public function getRemoteJSConsoleURL($html = null)
+    {
+        $uuid = $this->getRemoteJSConsole();
+
+        if (!$uuid)
+            return false;
+
+        $link = sprintf('http://jsconsole.com/?%%3Alisten%%20%s', $uuid);
+
+        // Return as HTML
+        if ($html !== null) {
+            if (!is_string($html))
+                $html = $this->internal_options->remote_js_console;
+
+            return sprintf("<a href=\"%s\" target=\"_blank\">%s</a>", $link, $html);
+        }
+
+        // Return just the link
+        return $link;
+
+    }
+
     /*---------- Private Helpers (callbacks have a public scope!) ----------*/
+
+    /**
+     * Checks if a function has been called before
+     *
+     * If not called before, it will set it as called and return false, otherwise returns true
+     *
+     * @return bool
+     * @since 1.0.11
+     */
+    final protected function wasCalled($calling_function)
+    {
+        $calling_function = get_called_class() . '\\' . $calling_function;
+
+        // Called before
+        if (isset($this->was_called[$calling_function]))
+            return true;
+
+        // Not called before
+        $this->was_called[$calling_function] = true;
+        return false;
+    }
+
+    /**
+     * Inserts (echoes) the JS queue, and then clears it
+     *
+     * @since 1.1
+     * @internal
+     */
+    protected function printJSQueue()
+    {
+        printf("<script type=\"text/javascript\">/* <![CDATA[ */%s/* ]]> */</script>\n", implode("", $this->js_code));
+
+        $this->js_code = array();
+    }
 
     /**
      * Inserts (echoes) the AJAX variables
@@ -618,18 +1075,71 @@ class WordpressPlugin
      *
      * @internal
      */
-    private function insertAjaxVars()
+    private function queueAjaxVars()
     {
-        $vars = sprintf(
-            'var %s_ajax = {"url":"%s","action":"%s","nonce":"%s","nonceresponse":"%s"};',
-            strtr($this->name, '-', '_'),
-            admin_url('admin-ajax.php'),
-            $this->name,
-            wp_create_nonce($this->name . '-ajax-call'),
-            wp_create_nonce($this->name . '-ajax-response')
+        // Standard vars
+        $vars = array(
+            'url'    => admin_url('admin-ajax.php'),
+            'action' => $this->name,
         );
 
-        echo '<script type="text/javascript">' . PHP_EOL . '/* <![CDATA[ */' . PHP_EOL . $vars . PHP_EOL . '/* ]]> */' . PHP_EOL . '</script>' . PHP_EOL;
+        // nonce vars
+        if (is_admin() || is_user_logged_in() || $this->verify_public_ajax) {
+            $vars['nonce']         = wp_create_nonce($this->name . '-ajax-call');
+            $vars['nonceresponse'] = wp_create_nonce($this->name . '-ajax-response');
+        }
+
+        $this->addJSQueue(sprintf("window.%s_ajax=%s;", strtr($this->name, '-', '_'), json_encode($vars)));
+    }
+
+    /**
+     * Inserts remote JS console script if enabled
+     *
+     * Note: For security reasons, this will only be inserted if a WordPress user
+     * with administration rights is logged in.
+     *
+     * @since 1.0.18
+     * @internal
+     */
+    private function insertJSConsole()
+    {
+        // Check if the script has already been inserted
+        if (isset($this->globals->pf4wp_js_console_inserted))
+            return;
+
+        if ($uuid = $this->getRemoteJSConsole()) {
+            // Check if a WordPress user is logged in and has admin rights
+            if (current_user_can('manage_options')) {
+                printf("<script src=\"http://jsconsole.com/remote.js?%s\"></script>\n", $uuid);
+
+                $this->globals->pf4wp_js_console_inserted = true;
+            } else {
+                echo "<!-- Warning: Remote JS Console enabled, but current user does not have sufficient privileges. -->\n";
+
+                $this->globals->pf4wp_js_console_inserted = false;
+            }
+        }
+    }
+
+    /**
+     * Inserts a Javascript variable to indicate if logging should be enabled
+     *
+     * @since 1.0.18
+     * @internal
+     */
+    private function queueJSLogFlag()
+    {
+        if (isset($this->globals->pf4wp_js_log_flag))
+            return;
+
+        if ((isset($this->globals->pf4wp_js_console_inserted) && $this->globals->pf4wp_js_console_inserted) ||
+            (defined('WP_DEBUG') && WP_DEBUG)) {
+
+            $this->addJSQueue('window.pf4wp_log=true;');
+
+            // Set flag to ensure its only written once
+            $this->globals->pf4wp_js_log_flag = true;
+        }
     }
 
     /**
@@ -696,7 +1206,7 @@ class WordpressPlugin
      * @see _onActivation(), onActivation()
      * @internal
      */
-    public function _doOnActivation()
+    final public function _doOnActivation()
     {
         // Call user-defined event
         $this->onActivation();
@@ -708,7 +1218,7 @@ class WordpressPlugin
      * @see _onDeactivation(), onDeactivation()
      * @internal
      */
-    public function _doOnDeactivation()
+    final public function _doOnDeactivation()
     {
         // Clear delayed notices
         $this->clearDelayedNotices();
@@ -723,7 +1233,7 @@ class WordpressPlugin
      * @see _onUninstal(), onUninstall()
      * @internal
      */
-    public function _doOnUninstall()
+    final public function _doOnUninstall()
     {
         // Delete our options from the WP database
         $this->options->delete();
@@ -838,9 +1348,6 @@ class WordpressPlugin
      */
     final public function _onAdminRegister()
     {
-        if (!is_admin())
-            return;
-
         // Additional actions to be registered
         $this->onAdminInit();
 
@@ -872,9 +1379,6 @@ class WordpressPlugin
      */
     final public function _onAfterPluginText()
     {
-        if (!is_admin())
-            return;
-
         $text = $this->onAfterPluginText();
 
         if ( !empty($text) )
@@ -892,9 +1396,6 @@ class WordpressPlugin
      */
     final public function _onPluginActionLinks($actions)
     {
-        if (!is_admin())
-            return;
-
         $url = $this->getParentMenuUrl();
 
         if ( !is_array($actions) )
@@ -941,9 +1442,20 @@ class WordpressPlugin
         if (!is_admin())
             return;
 
-        $this->insertAjaxVars();
+        // Queue AJAX variables
+        $this->queueAjaxVars();
 
+        // Insert remote JS console, if enabled
+        $this->insertJSConsole();
+
+        // Queue the JS Log Flag, if enabled
+        $this->queueJSLogFlag();
+
+        // Add user-defined Admin JS
         $this->onAdminScripts();
+
+        // Print JS Queue
+        $this->printJSQueue();
     }
 
     /**
@@ -953,9 +1465,6 @@ class WordpressPlugin
      */
     final public function _onAdminNotices()
     {
-        if (!is_admin())
-            return;
-
         $queue = $this->internal_options->delayed_notices;
 
         if (!empty($queue)) {
@@ -974,9 +1483,10 @@ class WordpressPlugin
      * @see onAjaxRequest(), ajaxResponse()
      * @internal
      */
-    final public function _onAjaxCall()
+    final public function _onAjaxCall($verify_ajax = true)
     {
-        check_ajax_referer($this->name . '-ajax-call'); // Dies if the check fails
+        if ($verify_ajax)
+            check_ajax_referer($this->name . '-ajax-call'); // Dies if the check fails
 
         header('Content-type: application/json');
 
@@ -991,6 +1501,20 @@ class WordpressPlugin
     }
 
     /**
+     * Process a public AJAX call
+     *
+     * Note: This will not be called if the admin is logged in, which will use _onAjaxCall instead
+     *
+     * @see onAjaxRequest(), ajaxResponse()
+     * @since 1.0.13
+     * @internal
+     */
+    final public function _onPublicAjaxCall()
+    {
+        $this->_onAjaxCall($this->verify_public_ajax);
+    }
+
+    /**
      * Registers public events
      *
      * @see onPublicScripts(), onPublicStyles(), onPublicLoad()
@@ -998,33 +1522,73 @@ class WordpressPlugin
      */
     final public function _onPublicInit()
     {
-        if (is_admin())
+        if (is_admin() || $this->wasCalled('_onPublicInit'))
             return;
 
         add_action('wp_print_scripts',  array($this, '_onPublicScripts'));
-        add_action('wp_print_styles',   array($this, 'onPublicStyles'));
-        add_action('wp_footer',         array($this, 'onPublicFooter'));
+        add_action('wp_print_styles',   array($this, '_onPublicStyles'));
+        add_action('wp_footer',         array($this, '_onPublicFooter'));
 
         $this->onPublicInit();
     }
 
     /**
-     * Event called public scripts
+     * Event called when to print public scripts
      *
      * @see onPublicScripts()
      * @internal
      */
     final public function _onPublicScripts()
     {
-        if ($this->public_ajax)
-            $this->insertAjaxVars();
+        if ($this->wasCalled('_onPublicScripts')) return; // Can only be called once!
 
+        // Queue AJAX variables, if enabled on public side
+        if ($this->public_ajax)
+            $this->queueAjaxVars();
+
+        // Insert remote JS console, if enabled
+        $this->insertJSConsole();
+
+        // Queue the JS Log Flag, if enabled
+        $this->queueJSLogFlag();
+
+        // Add user-defined public JS scripts
         $this->onPublicScripts();
+
+        // Print the JS queue
+        $this->printJSQueue();
+    }
+
+    /**
+     * Event called when to print public styles
+     *
+     * @see onPublicStyles()
+     * @internal
+     */
+    final public function _onPublicStyles()
+    {
+        if ($this->wasCalled('_onPublicStyles')) return; // Can only be called once!
+
+        $this->onPublicStyles();
+    }
+
+    /**
+     * Event called when ready to print public footer
+     *
+     * @see onPublicFooter()
+     * @internal
+     */
+    final public function _onPublicFooter()
+    {
+        if ($this->wasCalled('_onPublicFooter')) return; // Can only be called once!
+
+        $this->onPublicFooter();
     }
 
     /**
      * Handles a Stage 2 exception
      *
+     * @filter pf4wp_error_contactmsg_[short plugin name]
      * @param \Exception $exception Exception object
      * @param int $count Count of Exception object
      * @internal
@@ -1035,8 +1599,12 @@ class WordpressPlugin
 
         $content = '';
 
-        if ($count == 1)
-            $content .= '<div style="clear:both"></div><h1>' . __('Oops! Something went wrong', $this->name) . ':</h1>';
+        if ($count == 1) {
+            $image_pos  = 'position:relative;bottom:8px;';
+            $image_pos .=  (!is_rtl()) ? 'float:left;margin-right:8px;' : 'float:right;margin-left:8px;';
+
+            $content .= '<div style="clear:both"></div><h1>' . InternalImages::getHTML('sys_error', 32, $image_pos) . __('Oops! Something went wrong', $this->name) . ':</h1>';
+        }
 
         $content .= sprintf('<div class="postbox"><h2 style="border-bottom:1px solid #ddd;margin-bottom:10px;padding:5px;"><span>#%s</span> %s: %s</h2><ol>',
             $count,
@@ -1069,14 +1637,192 @@ class WordpressPlugin
 
         echo $content;
 
+        // Log to a file (@since 1.1)
+        $error_logged = ($this->log(
+            sprintf(
+                '%s %d "%s" %d "%s"',
+                get_class($exception),
+                $count,
+                $exception->getFile(),
+                $exception->getLine(),
+                addslashes($exception->getMessage())
+            ),
+            self::LOG_ERROR
+        ) === 1);
+
         if ($exception->getPrevious()) {
             $count++;
             $this->_onStage2Exception($exception->getPrevious(), $count);
         }
 
+        // Add a final message (@since 1.1)
+        echo apply_filters(
+            'pf4wp_error_contactmsg_' . $this->getName(),
+            sprintf(
+                __('<p>Please contact the plugin author <a href="%s" target="_blank">%s</a> with the above details%s if this problem persists.</p>', $this->getName()),
+                PluginInfo::getInfo(false, $this->getPluginBaseName(), 'AuthorURI'),
+                PluginInfo::getInfo(false, $this->getPluginBaseName(), 'Author'),
+                ($error_logged) ? ' or the logfile' : ''
+            ),
+            get_class($exception),
+            array(
+                'type'    => -1,
+                'file'    => $exception->getFile(),
+                'line'    => $exception->getLine(),
+                'message' => $exception->getMessage(),
+            ),
+            $error_logged
+        );
+
         die();
     }
 
+    /**
+     * Shutdown callback
+     *
+     * This callback is used to manage fatal errors, by logging it to a file if possible and
+     * providing the user with feedback as to what the error was. This avoids the
+     * over-simplistic 500 errors normally generated (provided WP_DEBUG was set to false).
+     *
+     * NOTE: This will only apply to pf4wp instances. This may de-activate a plugin, leaving
+     * only the current instance. The current instance will be referenced for certain functions,
+     * such as logging, but may fail depending on where the fatal error is located (thus creating
+     * a double fatal error) and so should not be relied upon - this is a best-effort feature.
+     *
+     * @filter pf4wp_error_contactmsg_[short plugin name]
+     * @internal
+     * @since 1.1
+     */
+    final public function _onShutdown()
+    {
+        $error          = error_get_last();
+        $pf4wp_instance = null;
+
+        // Check if we have an error
+        if (!is_array($error) || !array_key_exists('file', $error))
+            return;
+
+        // Obtain the true plugin base, if possible. Note: plugin_basename() already normalizes slashes
+        list($plugin_base_dir) = explode('/', plugin_basename($error['file']));
+
+        // Return if the error wasn't generated by a plugin
+        if (empty($plugin_base_dir))
+            return;
+
+        // Determine if the error was generated by a PF4WP instance
+        foreach (self::$instances as $instance_class => $instance) {
+            list($instance_base_dir) = explode('/', $instance->getPluginBaseName());
+
+            if (strcasecmp($instance_base_dir, $plugin_base_dir) === 0) {
+                $pf4wp_instance = $instance;
+                break;
+            }
+        }
+
+        // The plugin isn't a PF4WP instance, nothing for us to do
+        if (!isset($pf4wp_instance))
+            return;
+
+        $error_type = '';
+
+        // Handle error(s)
+        switch ($error['type']) {
+            case E_ERROR             : $error_type = (empty($error_type)) ? 'E_ERROR'             : $error_type;    // no break - Irrecoverable, fatal error
+            case E_USER_ERROR        : $error_type = (empty($error_type)) ? 'E_USER_ERROR'        : $error_type;    // no break - Irrecoverable, fatal error (user defined)
+            case E_CORE_ERROR        : $error_type = (empty($error_type)) ? 'E_CORE_ERROR'        : $error_type;    // no break - Irrecoverable, fatal core error (PHP)
+            case E_COMPILE_ERROR     : $error_type = (empty($error_type)) ? 'E_COMPILE_ERROR'     : $error_type;    // no break - Irrecoverable, fatal compile-time error (Zend)
+            case E_RECOVERABLE_ERROR : $error_type = (empty($error_type)) ? 'E_RECOVERABLE_ERROR' : $error_type;    // no break - Recoverable, considered fatal for now
+                $deactivated      = false;
+                $deactivated_msg  = '';
+                $error_logged_msg = '';
+
+                // Try logging the error to a file
+                $error_logged = ($pf4wp_instance->log(
+                    sprintf(
+                        '%s "%s" %d "%s"',
+                        $error_type,
+                        $error['file'],
+                        $error['line'],
+                        addslashes($error['message'])
+                    ),
+                    self::LOG_ERROR
+                ) === 1);
+
+                if ($error_logged)
+                    $error_logged_msg = sprintf(__('<p>A log of the error can be found in the file <code>%s</code></p>', $pf4wp_instance->getName()), $pf4wp_instance->getLogFile());
+
+                // If not in WP Debug mode, de-activate the plugin if possible
+                if (!defined('WP_DEBUG') || (defined('WP_DEBUG') && WP_DEBUG === false)) {
+                    if (!function_exists('deactivate_plugins'))
+                        @include_once(ABSPATH . 'wp-admin/includes/plugin.php');
+
+                    if (function_exists('deactivate_plugins')) {
+                        deactivate_plugins($pf4wp_instance->getPluginBaseName(), true);
+                        $deactivated = true;
+                        $deactivated_msg = __('<p>Because of this error, the plugin was automatically deactivated to prevent it from causing further problems with your WordPress site.</p>', $pf4wp_instance->getName());
+                    }
+                }
+
+                // Display a full-fledged error in Admin
+                if (is_admin()) {
+                    // Allow the plugin to define a message on how to be contacted
+                    $contact_msg = apply_filters(
+                        'pf4wp_error_contactmsg_' . $pf4wp_instance->getName(),
+                        sprintf(
+                            __('<p>Please contact the plugin author <a href="%s" target="_blank">%s</a> with the above details%s if this problem persists.</p>', $pf4wp_instance->getName()),
+                            PluginInfo::getInfo(false, $pf4wp_instance->getPluginBaseName(), 'AuthorURI'),
+                            PluginInfo::getInfo(false, $pf4wp_instance->getPluginBaseName(), 'Author'),
+                            ($error_logged) ? ' or the logfile' : ''
+                        ),
+                        $error_type,    // The error type name
+                        $error,         // Pass the error as well
+                        $error_logged   // And if the error was logged
+                    );
+
+                    wp_die(
+                        sprintf(
+                            __(
+                                '<h1>Fatal Error (%s)</h1>'.
+                                '<p><strong>There was a fatal error in the plugin %s.</strong></p>'.
+                                '<p>The error occurred in file <code>%s</code> on line %d. The cause of the error was:</p>'.
+                                '<p><pre>%1$s: %s</pre></p>'.
+                                '%s'. // Deactivated
+                                '%s'. // Error Logged
+                                '%s', // Contact Message
+                                $pf4wp_instance->getName()
+                            ),
+                            $error_type,
+                            $pf4wp_instance->getDisplayName(),
+                            $error['file'],
+                            $error['line'],
+                            $error['message'],
+                            $deactivated_msg,
+                            $error_logged_msg,
+                            $contact_msg
+                        ),
+                        sprintf(__('Fatal Error (%s)', $pf4wp_instance->getName()), $error_type),
+                        array('back_link' => true)
+                    );
+                } else {
+                    /* If the plugin was deactivated, reload the page so the user does not stare at a
+                     * blank page. We can't do this using headers, as they have already been sent.
+                     */
+                    if ($deactivated) {
+                        printf(
+                            "<head><script type=\"text/javascript\">/* <![CDATA[ */window.location.reload(true);/* ]]> */</script></head>\n".
+                            "<body><noscript>".
+                            __("Please <a href=\"%s\">click here</a> to reload this page.", $pf4wp_instance->getName()).
+                            "</noscript></body>",
+                            $_SERVER['REQUEST_URI']
+                        );
+                    }
+                    return;
+                }
+                break;
+
+            // Any other errors are ignored
+        }
+    }
 
     /*---------- Public events that are safe to override to provide full plugin functionality ----------*/
 
@@ -1089,6 +1835,8 @@ class WordpressPlugin
 
     /**
      * Event called when a filter is requested during action registration
+     *
+     * Note: this is only available in the Admin/Dashboard
      *
      * @param string $filter Name of the filter
      * @api
@@ -1183,7 +1931,7 @@ class WordpressPlugin
     }
 
     /**
-     * Event triggered when a public facing side of the plugin is ready for initialization
+     * Event triggered when the administrative side of the plugin is ready for initialization
      *
      * This is a plugin-wide event. For page (screen) specific events, use onAdminLoad()
      *

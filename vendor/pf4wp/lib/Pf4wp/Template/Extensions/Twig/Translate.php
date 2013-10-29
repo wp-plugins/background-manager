@@ -1,7 +1,7 @@
 <?php
 
 /*
- * Copyright (c) 2011-2012 Mike Green <myatus@gmail.com>
+ * Copyright (c) 2011-2013 Mike Green <myatus@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -23,7 +23,7 @@ class Translate extends \Twig_Extension
      * @internal
      */
     private $textdomain;
-    
+
     /**
      * Returns extension name to Twig
      */
@@ -31,7 +31,7 @@ class Translate extends \Twig_Extension
     {
         return 'translate';
     }
-    
+
     /**
      * Sets the text domain used for translations
      *
@@ -41,7 +41,7 @@ class Translate extends \Twig_Extension
     {
         $this->textdomain = $textdomain;
     }
-    
+
     /**
      * Returns the text domain used for transalations
      */
@@ -49,7 +49,7 @@ class Translate extends \Twig_Extension
     {
         return $this->textdomain;
     }
-    
+
     /**
      * Returns the available filters to Twig
      */
@@ -59,7 +59,7 @@ class Translate extends \Twig_Extension
             'trans' => new \Twig_Filter_Method($this, 'transFilter'),
         );
     }
-    
+
     /**
      * Returns available functions to Twig
      */
@@ -69,7 +69,7 @@ class Translate extends \Twig_Extension
             '__' => new \Twig_Function_Method($this, 'transFilter'),
         );
     }
-    
+
     /**
      * Translation Filter
      *
@@ -82,5 +82,5 @@ class Translate extends \Twig_Extension
     public function transFilter($string)
     {
         return __($string, $this->textdomain);
-    }    
+    }
 }
