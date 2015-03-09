@@ -1,5 +1,5 @@
 === Background Manager ===
-Contributors: Myatu
+Contributors: Myatu, Themewerk
 Donate link: http://pledgie.com/campaigns/16906
 Tags: background, theme, photo, image, rotate, slideshow, random, flickr
 Requires at least: 3.2.1
