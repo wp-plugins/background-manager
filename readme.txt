@@ -3,7 +3,7 @@ Contributors: Myatu
 Donate link: http://pledgie.com/campaigns/16906
 Tags: background, theme, photo, image, rotate, slideshow, random, flickr
 Requires at least: 3.2.1
-Tested up to: 3.7
+Tested up to: 4.2.3
 Stable tag: 1.2.5.2
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl-3.0.html
@@ -11,6 +11,8 @@ License URI: http://www.gnu.org/licenses/gpl-3.0.html
 Display a random image as the website background at each visit or as a timed slideshow, without the need to edit the theme.
 
 == Description ==
+
+**Note! This plugin has been deprecated; it is no longer maintained nor supported.**
 
 _Background Manager_ is a powerful replacement for the default WordPress background manager.
 
